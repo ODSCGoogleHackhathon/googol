@@ -12,7 +12,9 @@ available_labels = {
     'label 3': 'yellow'
 }
 
-imgs = []
+MAX_IMG_PER_PAGE=12
+if 'imgs' not in st.session_state.keys():
+   st.session_state['imgs'] = [[]]
 
 st.set_page_config(layout='wide')
 
@@ -30,25 +32,43 @@ with st.expander('# 📁 Add Files'):
     confirmed = st.button('Confirm')
     ALLOWED_EXTENSIONS = ('jpg', 'jpeg', 'png', 'svg')
     if folder_path and confirmed:
+        current_page = 0
+        file_num = 0
         iterator = os.walk(folder_path)
         data = next(iterator, None)
+        st.session_state['imgs'] = [[]]
         while data is not None:
             dirpath, dirnames, filenames = data
 
             for filename in filenames:
                 # Check if file format is appropriate
                 if filename.endswith(ALLOWED_EXTENSIONS):
-                    imgs.append(os.path.join(dirpath, filename))
+
+                    # If there's no space in the current page, add a new page
+                    if file_num == MAX_IMG_PER_PAGE:
+                        current_page += 1
+                        st.session_state['imgs'].append([])
+                        file_num = 0
+                    
+                    # Add to current page
+                    st.session_state['imgs'][current_page].append(os.path.join(dirpath, filename))
+                    file_num += 1
 
             data = next(iterator, None)
-        print('Data collected: ', imgs)
+        print('Data collected: ', st.session_state['imgs'])
 
 # MAIN AREA (Where Images are Displayed) -------------------------------------------------------------
 
 columns = st.columns(3)
+if 'page_num' not in st.session_state:
+    st.session_state['page_num'] = 0
+with st.container(key='imgs_page'):
 
-for i, img in enumerate(imgs):
-    display_img(columns[i % 3], img, str(i))
+    for i, img in enumerate(st.session_state['imgs'][st.session_state['page_num']]):
+     display_img(columns[i % 3], img, str(i))
+    if len(st.session_state['imgs']) > 1:
+        last_page = len(st.session_state['imgs'])
+        st.session_state['page_num'] = st.select_slider('Page', options=range(last_page))
 
 # SIDEBAR (Chatbot Zone) -----------------------------------------------------------------------------
 with st.sidebar:
