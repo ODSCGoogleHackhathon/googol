@@ -1,4 +1,6 @@
 import streamlit as st
+import os
+
 
 # HEAD ------------------------------------------------------------------------------------------------------
 
@@ -20,6 +22,25 @@ st.header('Googol')
 '---'
 # FILE UPLOAD AREA ----------------------------------------------------------------------------------------
 
+# imgs = st.file_uploader('Upload Dataset  Folder / Images', type=['jpg', 'jpeg', 'png', 'svg'], accept_multiple_files='directory')
+
+with st.expander('# 📁 Add Files'):
+    folder_path = st.text_input('Please choose a folder path:')
+    confirmed = st.button('Confirm')
+    ALLOWED_EXTENSIONS = ('jpg', 'jpeg', 'png', 'svg')
+    if folder_path and confirmed:
+        iterator = os.walk(folder_path)
+        data = next(iterator, None)
+        while data is not None:
+            dirpath, dirnames, filenames = data
+
+            for filename in filenames:
+                # Check if file format is appropriate
+                if filename.endswith(ALLOWED_EXTENSIONS):
+                    imgs.append(os.path.join(dirpath, filename))
+
+            data = next(iterator, None)
+        print('Data collected: ', imgs)
 
 # MAIN AREA (Where Images are Displayed) -------------------------------------------------------------
 
