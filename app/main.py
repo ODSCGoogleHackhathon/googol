@@ -1,4 +1,5 @@
 import streamlit as st
+from components.image import display_img
 import os
 
 
@@ -46,6 +47,8 @@ with st.expander('# 📁 Add Files'):
 
 columns = st.columns(3)
 
+for i, img in enumerate(imgs):
+    display_img(columns[i % 3], img, str(i))
 
 # SIDEBAR (Chatbot Zone) -----------------------------------------------------------------------------
 with st.sidebar:
