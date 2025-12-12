@@ -101,15 +101,18 @@ with export_and_st[1]:
 # MAIN AREA (Where Images are Displayed) -------------------------------------------------------------
 
 columns = st.columns(3, gap='medium')
+
 if 'page_num' not in st.session_state:
     st.session_state['page_num'] = 0
 with st.container(key='imgs_page'):
-
-    for i, img in enumerate(st.session_state['imgs'][st.session_state['page_num']]):
-     display_img(columns[i % 3], img, st.session_state['final_data_df'][st.session_state['final_data_df']['path'] == img], str(i))
+    
     if len(st.session_state['imgs']) > 1:
         last_page = len(st.session_state['imgs'])
         st.session_state['page_num'] = st.select_slider('Page', options=range(last_page))
+
+    for i, img in enumerate(st.session_state['imgs'][st.session_state['page_num']]):
+        display_img(columns[i % 3], img, st.session_state['final_data_df'][st.session_state['final_data_df']['path'] == img], str(i))
+
 
 # SIDEBAR (Chatbot Zone) -----------------------------------------------------------------------------
 with st.sidebar:
