@@ -1,6 +1,7 @@
 import streamlit as st
 from components.image import display_img
 import os
+import pandas as pd
 
 
 # HEAD ------------------------------------------------------------------------------------------------------
@@ -16,10 +17,6 @@ MAX_IMG_PER_PAGE=12
 if 'imgs' not in st.session_state.keys():
    st.session_state['imgs'] = [[]]
 
-if 'final_data' not in st.session_state.keys():
-    st.session_state['final_data'] = {} # this object will store all data, such as imgs (keys) and their labels
-    # each img in the dictionary consists in another dictionary with the following keys: 'label', 'description'.
-
 if 'chat_history' not in st.session_state.keys():
    st.session_state['chat_history'] = [{'name': 'ai', 'content': 'Hello! How can I help you with labeling this dataset?'}]
 
@@ -34,10 +31,11 @@ st.header('Googol')
 
 # imgs = st.file_uploader('Upload Dataset  Folder / Images', type=['jpg', 'jpeg', 'png', 'svg'], accept_multiple_files='directory')
 
-with st.expander('# 📁 Add Files'):
+with st.expander('# 📁 Add Files', width='stretch'):
     folder_path = st.text_input('Please choose a folder path:')
     confirmed = st.button('Confirm')
     ALLOWED_EXTENSIONS = ('jpg', 'jpeg', 'png', 'svg')
+    df_data = {'label': [], 'description': [], 'path': []}
     if folder_path and confirmed:
         current_page = 0
         file_num = 0
@@ -60,14 +58,45 @@ with st.expander('# 📁 Add Files'):
                     # Add to current page
                     file_path = os.path.join(dirpath, filename)
                     st.session_state['imgs'][current_page].append(file_path)
-                    st.session_state['final_data'][file_path] = {
-                        'label': 'default',
-                        'description': 'No description provided.'
-                    }
+
+                    df_data['label'].append('default')
+                    df_data['description'].append('No description provided.')
+                    df_data['path'].append(file_path)
                     file_num += 1
 
             data = next(iterator, None)
+        if 'final_data_df' not in st.session_state.keys():
+            st.session_state['final_data_df'] = pd.DataFrame(df_data)
+
         print('Data collected: ', st.session_state['imgs'])
+
+# EXPORT & Statistics --------------------------------------------------------------------------------
+
+@st.dialog('Statistics', width='large')
+def show_statistics():
+    #st.bar_chart()
+    st.write('Data')
+
+    if 'final_data_df' in st.session_state is not None:
+
+        st.dataframe(st.session_state['final_data_df'])
+
+        st.write('Label Frequencies')
+        frequencies_df = st.session_state['final_data_df']['label'].value_counts()
+
+        st.bar_chart(frequencies_df, horizontal=True)
+    else:
+        st.error('Please choose a folder before viewing statistics.')
+
+
+export_and_st = st.columns(2)
+
+with export_and_st[0]:
+    if st.button('# 📦 Export Results', width='stretch'):
+        print('Exported')
+with export_and_st[1]:
+    if st.button('📊 View Statistics', width='stretch'):
+        show_statistics()
 
 # MAIN AREA (Where Images are Displayed) -------------------------------------------------------------
 
@@ -77,7 +106,7 @@ if 'page_num' not in st.session_state:
 with st.container(key='imgs_page'):
 
     for i, img in enumerate(st.session_state['imgs'][st.session_state['page_num']]):
-     display_img(columns[i % 3], img, st.session_state['final_data'][img], str(i))
+     display_img(columns[i % 3], img, st.session_state['final_data_df'][st.session_state['final_data_df']['path'] == img], str(i))
     if len(st.session_state['imgs']) > 1:
         last_page = len(st.session_state['imgs'])
         st.session_state['page_num'] = st.select_slider('Page', options=range(last_page))

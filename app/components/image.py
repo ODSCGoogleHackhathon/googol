@@ -10,5 +10,5 @@ def display_img(column, path, final_data, name):
             with st.container(horizontal=True):
                 with st.popover('Image Path'):
                     st.write(f'``{path}``')
-                st.badge(final_data['label'], color='red')
-            st.image(image=path, caption=final_data['description'])
+                st.badge(final_data['label'].values[0], color='red')
+            st.image(image=path, caption=final_data['description'].values[0])
