@@ -7,7 +7,7 @@ import os
 
 data_context = None
 available_labels = {
-    'label 1': 'red',
+    'default': 'red',
     'label 2': 'green',
     'label 3': 'yellow'
 }
@@ -15,6 +15,10 @@ available_labels = {
 MAX_IMG_PER_PAGE=12
 if 'imgs' not in st.session_state.keys():
    st.session_state['imgs'] = [[]]
+
+if 'final_data' not in st.session_state.keys():
+    st.session_state['final_data'] = {} # this object will store all data, such as imgs (keys) and their labels
+    # each img in the dictionary consists in another dictionary with the following keys: 'label', 'description'.
 
 st.set_page_config(layout='wide')
 
@@ -51,7 +55,12 @@ with st.expander('# 📁 Add Files'):
                         file_num = 0
                     
                     # Add to current page
-                    st.session_state['imgs'][current_page].append(os.path.join(dirpath, filename))
+                    file_path = os.path.join(dirpath, filename)
+                    st.session_state['imgs'][current_page].append(file_path)
+                    st.session_state['final_data'][file_path] = {
+                        'label': 'default',
+                        'description': 'No description provided.'
+                    }
                     file_num += 1
 
             data = next(iterator, None)
@@ -59,13 +68,13 @@ with st.expander('# 📁 Add Files'):
 
 # MAIN AREA (Where Images are Displayed) -------------------------------------------------------------
 
-columns = st.columns(3)
+columns = st.columns(3, gap='medium')
 if 'page_num' not in st.session_state:
     st.session_state['page_num'] = 0
 with st.container(key='imgs_page'):
 
     for i, img in enumerate(st.session_state['imgs'][st.session_state['page_num']]):
-     display_img(columns[i % 3], img, str(i))
+     display_img(columns[i % 3], img, st.session_state['final_data'][img], str(i))
     if len(st.session_state['imgs']) > 1:
         last_page = len(st.session_state['imgs'])
         st.session_state['page_num'] = st.select_slider('Page', options=range(last_page))

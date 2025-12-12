@@ -1,11 +1,14 @@
 import streamlit as st
 import uuid
 
-def display_img(column, path, name):
+def display_img(column, path, final_data, name):
 
     with column:
         with st.container():
-            column.write(f'``{path}``')
-            column.badge('label 1', color='red')
-            column.image(image=path, caption='## A medical image\n This photo reveals to us that...')
-            column.pills('', ['Flag', 'Relabel', 'Remove'], key=path + name, selection_mode='single')
+
+            st.pills('', ['Flag', 'Relabel', 'Remove'], key=path + name, selection_mode='single')
+            with st.container(horizontal=True):
+                with st.popover('Image Path'):
+                    st.write(f'``{path}``')
+                st.badge(final_data['label'], color='red')
+            st.image(image=path, caption=final_data['description'])
