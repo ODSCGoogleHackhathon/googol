@@ -44,6 +44,12 @@ data/sample_images/*.jpg
 data/sample_images/*.png
 data/annotations/*.json
 
+# Models (HuggingFace cache)
+models/
+*.bin
+*.safetensors
+*.ckpt
+
 # OS
 .DS_Store
 Thumbs.db

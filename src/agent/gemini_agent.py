@@ -38,10 +38,7 @@ class GeminiAnnotationAgent:
         )
 
         # Initialize MedGemma tool
-        self.medgemma_tool = MedGemmaTool(
-            endpoint=settings.medgemma_endpoint,
-            model_path=settings.medgemma_model_path
-        )
+        self.medgemma_tool = MedGemmaTool()
 
         logger.info(f"Gemini agent initialized with model: {settings.gemini_model}")
 

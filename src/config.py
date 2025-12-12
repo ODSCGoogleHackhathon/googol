@@ -15,8 +15,11 @@ class Settings(BaseSettings):
     google_cloud_project: str = os.getenv("GOOGLE_CLOUD_PROJECT", "")
 
     # MedGemma Configuration
-    medgemma_endpoint: Literal["local", "vertex_ai"] = os.getenv("MEDGEMMA_ENDPOINT", "local")
-    medgemma_model_path: str = os.getenv("MEDGEMMA_MODEL_PATH", "google/medgemma-4b")
+    medgemma_endpoint: Literal["mock", "huggingface", "vertex_ai"] = os.getenv("MEDGEMMA_ENDPOINT", "huggingface")
+    medgemma_model_id: str = os.getenv("MEDGEMMA_MODEL_ID", "google/medgemma-4b-it")
+    medgemma_cache_dir: str = os.getenv("MEDGEMMA_CACHE_DIR", "./models")
+    medgemma_device: str = os.getenv("MEDGEMMA_DEVICE", "auto")  # "auto", "cpu", "cuda", "mps"
+    huggingface_token: str = os.getenv("HUGGINGFACE_TOKEN", "")  # Optional, for private models
 
     # Backend Configuration
     backend_host: str = os.getenv("BACKEND_HOST", "localhost")
