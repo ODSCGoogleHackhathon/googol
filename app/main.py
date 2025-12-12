@@ -20,6 +20,9 @@ if 'final_data' not in st.session_state.keys():
     st.session_state['final_data'] = {} # this object will store all data, such as imgs (keys) and their labels
     # each img in the dictionary consists in another dictionary with the following keys: 'label', 'description'.
 
+if 'chat_history' not in st.session_state.keys():
+   st.session_state['chat_history'] = [{'name': 'ai', 'content': 'Hello! How can I help you with labeling this dataset?'}]
+
 st.set_page_config(layout='wide')
 
 # HEADER --------------------------------------------------------------------------------------------------
@@ -96,9 +99,20 @@ with st.sidebar:
 
     with st.container(key='chat_area'):
         '---'
-        '# AI Assistance'
-        with st.chat_message('ai'):
-            'Hello! How can I help you with labeling this dataset?'
+        '# AI Chat'
 
+        for msg in st.session_state['chat_history']:
+            with st.chat_message(msg['name']):
+                st.write(msg['content'])
+        
         with st.chat_message('user'):
-            user_input = st.text_input('You:', placeholder='Can you label these images according to anomalies found?')
+            with st.form('user_msg_form', clear_on_submit=True):
+                user_input = st.text_input('You:', placeholder='Can you label these images according to anomalies found?', value='')
+                submit = st.form_submit_button('Send', icon='➡️')
+            
+                if submit:
+                    st.session_state['chat_history'].append({'name': 'user', 'content': user_input})
+
+                    # This is where the API call will take place
+                    st.session_state['chat_history'].append({'name': 'ai', 'content': 'I\'m an AI reply'})
+                    st.rerun()  
