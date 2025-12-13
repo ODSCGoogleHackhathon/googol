@@ -7,11 +7,12 @@ import pandas as pd
 # HEAD ------------------------------------------------------------------------------------------------------
 
 data_context = None
-available_labels = {
-    'default': 'red',
-    'label 2': 'green',
-    'label 3': 'yellow'
-}
+colors = ['red', 'green', 'yellow', 'violet', 'orange', 'blue', 'gray']
+colors_i = 1
+if 'available_labels' not in st.session_state.keys():
+    st.session_state['available_labels'] = {
+        'default': 'red'
+    }
 
 MAX_IMG_PER_PAGE=12
 if 'imgs' not in st.session_state.keys():
@@ -33,9 +34,11 @@ st.header('Googol')
 
 with st.expander('# 📁 Add Files', width='stretch'):
     folder_path = st.text_input('Please choose a folder path:')
+    consider_folder_as_patient = st.checkbox('Consider Subfolder As Patient ID')
+    consider_folder_as_label = st.checkbox('Consider Subfolder As Label')
     confirmed = st.button('Confirm')
     ALLOWED_EXTENSIONS = ('jpg', 'jpeg', 'png', 'svg')
-    df_data = {'label': [], 'description': [], 'path': []}
+    df_data = {'label': [], 'description': [], 'path': [], 'patient': []}
     if folder_path and confirmed:
         current_page = 0
         file_num = 0
@@ -44,6 +47,8 @@ with st.expander('# 📁 Add Files', width='stretch'):
         st.session_state['imgs'] = [[]]
         while data is not None:
             dirpath, dirnames, filenames = data
+
+            folder_name = dirpath.split('/')[-1]
 
             for filename in filenames:
                 # Check if file format is appropriate
@@ -59,14 +64,20 @@ with st.expander('# 📁 Add Files', width='stretch'):
                     file_path = os.path.join(dirpath, filename)
                     st.session_state['imgs'][current_page].append(file_path)
 
-                    df_data['label'].append('default')
+                    df_data['label'].append(folder_name if consider_folder_as_label else 'default')
                     df_data['description'].append('No description provided.')
                     df_data['path'].append(file_path)
+                    df_data['patient'].append(folder_name if consider_folder_as_patient else 'anonymous')
                     file_num += 1
 
             data = next(iterator, None)
-        if 'final_data_df' not in st.session_state.keys():
-            st.session_state['final_data_df'] = pd.DataFrame(df_data)
+        
+        st.session_state['final_data_df'] = pd.DataFrame(df_data)
+
+        # Setting labels
+        for label in st.session_state['final_data_df']['label'].unique():
+            st.session_state['available_labels'][label] = colors[colors_i % len(colors)]
+            colors_i += 1
 
         print('Data collected: ', st.session_state['imgs'])
 
@@ -111,15 +122,15 @@ with st.container(key='imgs_page'):
         st.session_state['page_num'] = st.select_slider('Page', options=range(last_page))
 
     for i, img in enumerate(st.session_state['imgs'][st.session_state['page_num']]):
-        display_img(columns[i % 3], img, st.session_state['final_data_df'][st.session_state['final_data_df']['path'] == img], str(i))
+        display_img(columns[i % 3], img, st.session_state['final_data_df'][st.session_state['final_data_df']['path'] == img], str(i), st.session_state['available_labels'])
 
 
 # SIDEBAR (Chatbot Zone) -----------------------------------------------------------------------------
 with st.sidebar:
 
     with st.container(horizontal=True):
-        for label in available_labels.keys():
-            st.badge(label, color=available_labels[label])
+        for label in st.session_state['available_labels'].keys():
+            st.badge(label, color=st.session_state['available_labels'][label])
 
     with st.form('context'):
         st.write('Write the medical context for your dataset:')
