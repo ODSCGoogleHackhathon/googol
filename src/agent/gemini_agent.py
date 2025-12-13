@@ -73,12 +73,11 @@ class GeminiAnnotationAgent:
             )
             logger.info(f"MedGemma analysis complete: {len(medgemma_analysis)} chars")
 
-            # Step 2: Use Gemini to structure the output
-            logger.info("Step 2: Processing with Gemini to generate structured output")
-            structured_output = self._generate_structured_annotation(
-                medgemma_analysis=medgemma_analysis,
-                user_prompt=user_prompt,
-                patient_id=patient_id
+            # Step 2: Parse MedGemma output locally (bypassing Gemini)
+            logger.info("Step 2: Parsing MedGemma output locally")
+            structured_output = self._create_smart_fallback_annotation(
+                medgemma_analysis,
+                patient_id
             )
 
             return structured_output
@@ -168,6 +167,62 @@ Please convert this analysis into the structured JSON format."""
             logger.error(f"Error generating structured annotation: {e}", exc_info=True)
             return self._create_fallback_annotation(medgemma_analysis, patient_id)
 
+    def _create_smart_fallback_annotation(
+        self,
+        analysis: str,
+        patient_id: Optional[str]
+    ) -> AnnotationOutput:
+        """
+        Parse MedGemma output locally without Gemini.
+        Returns full analysis in additional_notes.
+        """
+        import re
+
+        findings = []
+        confidence = 0.75
+
+        # Extract confidence if mentioned
+        confidence_match = re.search(r"confidence.*?(\d+)%", analysis, re.IGNORECASE)
+        if confidence_match:
+            confidence = float(confidence_match.group(1)) / 100
+
+        # Extract key findings
+        finding_keywords = {
+            "pneumothorax": ("Lungs", "Severe"),
+            "atelectasis": ("Lungs", "Mild"),
+            "consolidation": ("Lungs", "Moderate"),
+            "effusion": ("Pleural Space", "Moderate"),
+            "cardiomegaly": ("Heart", "Moderate"),
+            "fracture": ("Bones", "Severe"),
+            "normal": ("Overall", "None"),
+            "clear": ("Lungs", "None"),
+        }
+
+        analysis_lower = analysis.lower()
+        for keyword, (location, severity) in finding_keywords.items():
+            if keyword in analysis_lower:
+                findings.append(Finding(
+                    label=keyword.title(),
+                    location=location,
+                    severity=severity
+                ))
+
+        # If no findings, create generic one
+        if not findings:
+            findings.append(Finding(
+                label="Medical Image Analysis",
+                location="See additional notes",
+                severity="Unknown"
+            ))
+
+        return AnnotationOutput(
+            patient_id=patient_id or "LOCAL-PARSER-001",
+            findings=findings,
+            confidence_score=confidence,
+            generated_by="MedGemma/Local-Parser",
+            additional_notes=analysis  # Full analysis, no truncation
+        )
+
     def _create_fallback_annotation(
         self,
         analysis: str,
@@ -175,7 +230,7 @@ Please convert this analysis into the structured JSON format."""
     ) -> AnnotationOutput:
         """Create a basic annotation when structured parsing fails."""
         return AnnotationOutput(
-            patient_id=patient_id or "FALLBACK-001",
+            patient_id=patient_id,
             findings=[
                 Finding(
                     label="Analysis Available",
@@ -185,7 +240,7 @@ Please convert this analysis into the structured JSON format."""
             ],
             confidence_score=0.5,
             generated_by="MedGemma/Gemini-Fallback",
-            additional_notes=analysis[:500]  # First 500 chars
+            additional_notes=analysis  # Full analysis
         )
 
     def check_health(self) -> Dict[str, bool]:

@@ -47,7 +47,7 @@ def annotate_image(image_base64: str, user_prompt: str = None, patient_id: str =
         response = requests.post(
             f"{API_URL}/annotate",
             json=payload,
-            timeout=30
+            timeout=240  # 4 minutes for MedGemma inference
         )
         response.raise_for_status()
         return response.json()

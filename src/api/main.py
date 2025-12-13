@@ -145,5 +145,5 @@ if __name__ == "__main__":
         "src.api.main:app",
         host=settings.backend_host,
         port=settings.backend_port,
-        reload=True
+        reload=False  # Disabled to prevent reload loop during model loading
     )

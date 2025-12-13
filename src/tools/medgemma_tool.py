@@ -5,7 +5,7 @@ import base64
 from io import BytesIO
 from PIL import Image
 import torch
-from transformers import AutoProcessor, AutoModelForCausalLM
+from transformers import AutoProcessor, AutoModelForImageTextToText
 
 from src.config import settings
 
@@ -64,12 +64,12 @@ class MedGemmaTool:
                 token=settings.huggingface_token if settings.huggingface_token else None
             )
 
-            # Load model
-            self.model = AutoModelForCausalLM.from_pretrained(
+            # Load model - using AutoModelForImageTextToText for MedGemma
+            self.model = AutoModelForImageTextToText.from_pretrained(
                 self.model_id,
                 cache_dir=self.cache_dir,
-                torch_dtype=torch.float16 if self.device in ["cuda", "mps"] else torch.float32,
-                device_map=self.device if self.device == "auto" else None,
+                torch_dtype=torch.bfloat16 if self.device in ["cuda", "mps"] else torch.float32,
+                device_map="auto" if self.device == "auto" else None,
                 token=settings.huggingface_token if settings.huggingface_token else None
             )
 
@@ -99,19 +99,12 @@ class MedGemmaTool:
             image_data = base64.b64decode(image_base64)
             image = Image.open(BytesIO(image_data))
 
-            if image.mode != 'RGB':
-                image = image.convert('RGB')
+            image = image.convert('RGB')
 
             logger.info(f"Analyzing image of size: {image.size}, mode: {image.mode}")
 
             # Route to appropriate endpoint
-            if self.endpoint == "huggingface" and self.model is not None:
-                return self._huggingface_analysis(image, prompt)
-            elif self.endpoint == "vertex_ai":
-                return self._vertex_ai_analysis(image, prompt)
-            else:
-                # Fallback to mock
-                return self._mock_medgemma_analysis(image, prompt)
+            return self._huggingface_analysis(image, prompt)
 
         except Exception as e:
             logger.error(f"Error analyzing image with MedGemma: {e}")
@@ -120,14 +113,15 @@ class MedGemmaTool:
     def _huggingface_analysis(self, image: Image.Image, prompt: Optional[str]) -> str:
         """
         Analyze medical image using HuggingFace MedGemma model.
+        Uses chat template format as per MedGemma documentation.
         """
         try:
             # Create prompt for medical analysis
             if prompt:
-                text_prompt = f"Analyze this medical image. Focus on: {prompt}"
+                user_text = f"Analyze this medical image. Focus on: {prompt}"
             else:
-                text_prompt = (
-                    "You are a medical imaging expert. Analyze this medical image and provide:\n"
+                user_text = (
+                    "Analyze this medical image and provide:\n"
                     "1. Type of medical imaging (X-ray, CT, MRI, etc.)\n"
                     "2. Anatomical region visible\n"
                     "3. Key findings and observations\n"
@@ -135,39 +129,50 @@ class MedGemmaTool:
                     "5. Confidence level in your assessment"
                 )
 
-            # Prepare inputs
-            inputs = self.processor(
-                images=image,
-                text=text_prompt,
+            # Format as chat messages (MedGemma's required format)
+            messages = [
+                {
+                    "role": "system",
+                    "content": [{"type": "text", "text": "You are an expert radiologist."}]
+                },
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": user_text},
+                        {"type": "image", "image": image}
+                    ]
+                }
+            ]
+
+            # Apply chat template
+            inputs = self.processor.apply_chat_template(
+                messages,
+                add_generation_prompt=True,
+                tokenize=True,
+                return_dict=True,
                 return_tensors="pt"
             )
 
-            # Move inputs to device
+            # Move to device
             if self.device not in ["auto"]:
-                inputs = {k: v.to(self.device) for k, v in inputs.items()}
+                inputs = inputs.to(self.device, dtype=torch.bfloat16)
+            else:
+                inputs = inputs.to(self.model.device, dtype=torch.bfloat16)
+
+            input_len = inputs["input_ids"].shape[-1]
 
             # Generate response
             logger.info("Generating MedGemma analysis...")
-            with torch.no_grad():
-                outputs = self.model.generate(
+            with torch.inference_mode():
+                generation = self.model.generate(
                     **inputs,
-                    max_new_tokens=512,
-                    do_sample=True,
-                    temperature=0.7,
-                    top_p=0.95,
+                    max_new_tokens=2048,  # Increased for detailed medical analysis
+                    do_sample=False
                 )
+                generation = generation[0][input_len:]
 
             # Decode response
-            generated_text = self.processor.batch_decode(
-                outputs,
-                skip_special_tokens=True
-            )[0]
-
-            # Extract the response (remove the prompt part)
-            if text_prompt in generated_text:
-                response = generated_text.split(text_prompt, 1)[-1].strip()
-            else:
-                response = generated_text
+            response = self.processor.decode(generation, skip_special_tokens=True)
 
             logger.info(f"MedGemma analysis complete: {len(response)} chars")
 
@@ -175,70 +180,7 @@ class MedGemmaTool:
 
         except Exception as e:
             logger.error(f"Error in HuggingFace analysis: {e}")
-            logger.warning("Falling back to mock analysis")
-            return self._mock_medgemma_analysis(image, prompt)
-
-    def _mock_medgemma_analysis(self, image: Image.Image, prompt: Optional[str]) -> str:
-        """
-        Mock MedGemma analysis for demo/testing purposes.
-        """
-        analysis = """
-Medical Image Analysis Results:
-
-IMAGING TYPE: Chest X-Ray - Frontal View
-ANATOMICAL REGION: Thorax (Chest)
-
-FINDINGS:
-1. Image Quality
-   - Adequate penetration and positioning
-   - Good visualization of thoracic structures
-
-2. Cardiac Assessment
-   - Heart: Normal size and contour
-   - Cardiothoracic ratio: Within normal limits (<0.5)
-   - No cardiomegaly detected
-
-3. Pulmonary Assessment
-   - Lung Fields: Clear bilaterally
-   - No focal consolidation
-   - No pleural effusion
-   - No pneumothorax
-   - Vascular markings appear normal
-
-4. Mediastinum
-   - Normal mediastinal contour
-   - No widening or masses
-
-5. Bony Structures
-   - Ribs: No acute fractures visible
-   - Spine: Alignment appears normal
-   - Clavicles: Symmetric, no abnormalities
-
-ADDITIONAL OBSERVATIONS:
-   - Possible mild linear opacity in right lower lung zone
-   - This may represent subsegmental atelectasis
-   - Clinical correlation recommended
-
-IMPRESSION:
-   - Essentially normal chest radiograph
-   - No acute cardiopulmonary abnormality identified
-   - Recommend clinical correlation for subtle right lower lung finding
-
-CONFIDENCE LEVEL: 85%
-RECOMMENDATION: If clinically indicated, follow-up imaging may be considered
-        """
-
-        if prompt:
-            analysis = f"Analysis focused on: {prompt}\n\n" + analysis
-
-        return analysis.strip()
-
-    def _vertex_ai_analysis(self, image: Image.Image, prompt: Optional[str]) -> str:
-        """
-        Placeholder for Vertex AI MedGemma integration.
-        """
-        logger.warning("Vertex AI endpoint not yet implemented, using mock data")
-        return self._mock_medgemma_analysis(image, prompt)
+            raise  # Re-raise to see the full error
 
     def get_tool_definition(self) -> Dict[str, Any]:
         """
