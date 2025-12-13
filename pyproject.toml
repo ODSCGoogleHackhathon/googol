@@ -18,37 +18,36 @@ classifiers = [
 ]
 
 dependencies = [
-    # Core Dependencies
+    # Core - Shared between backend and frontend
+    "pydantic==2.10.5",
+    "pydantic-settings==2.7.0",
+    "python-dotenv==1.0.1",
+    "Pillow==11.0.0",
+    "aiofiles==24.1.0",
+    "httpx==0.28.1",
+
+    # Backend API
     "fastapi==0.115.6",
     "uvicorn[standard]==0.34.0",
-    "streamlit==1.41.1",
     "python-multipart==0.0.20",
 
     # Google AI
     "google-generativeai==0.8.3",
     "google-cloud-aiplatform==1.75.0",
-
-    # HuggingFace & ML
-    "transformers>=4.45.0",
-    "torch>=2.0.0",
-    "accelerate>=0.34.0",
-    "sentencepiece>=0.2.0",
-
-    # Image Processing
-    "Pillow==11.0.0",
-    "opencv-python==4.10.0.84",
-
-    # Data Handling
-    "pydantic==2.10.5",
-    "pydantic-settings==2.7.0",
-    "python-dotenv==1.0.1",
-
-    # Utilities
-    "aiofiles==24.1.0",
-    "httpx==0.28.1",
 ]
 
 [project.optional-dependencies]
+ml = [
+    # MedGemma - Heavy ML Stack (backend only)
+    "transformers>=4.45.0",
+    "torch>=2.0.0",
+]
+
+ui = [
+    # Streamlit Frontend (frontend only)
+    "streamlit==1.41.1",
+]
+
 dev = [
     "pytest==8.3.4",
     "pytest-asyncio==0.24.0",
