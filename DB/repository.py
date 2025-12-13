@@ -1,10 +1,11 @@
 import sqlite3
 
 class AnnotationRepo:
-    
-    def __init__(self):
-        self.connection = sqlite3.connect('./DB/annotations.db')
+
+    def __init__(self, db_path: str = './DB/annotations.db'):
+        self.connection = sqlite3.connect(db_path, check_same_thread=False)
         self.cursor = self.connection.cursor()
+        self.cursor.execute("PRAGMA foreign_keys = ON")
     
     def save_annotations(self, set_name:str, data: list[list]):
         """
@@ -53,7 +54,7 @@ class AnnotationRepo:
     def get_annotations(self, set_name:str, paths:list[str]|None=None):
         """
         Retrieves annotations for a specific set. Returns a list of annotations.
-        
+
         :param self: Description
         :param set_name: Description
         :type set_name: str
@@ -61,21 +62,25 @@ class AnnotationRepo:
         :type paths: list[str]|None
         """
         if paths is None:
-            res = self.cursor.execute('SELECT * FROM annotation WHERE set_name=?', set_name)
+            res = self.cursor.execute('SELECT * FROM annotation WHERE set_name=?', [set_name])
         else:
-            res = self.cursor.execute(f'SELECT * FROM annotation WHERE set_name=? AND path_url IN ({','.join(['?']*len(paths))})', [set_name] + paths) # based on https://stackoverflow.com/questions/5766230/select-from-sqlite-table-where-rowid-in-list-using-python-sqlite3-db-api-2-0
+            placeholders = ','.join(['?'] * len(paths))
+            query = f'SELECT * FROM annotation WHERE set_name=? AND path_url IN ({placeholders})'
+            res = self.cursor.execute(query, [set_name] + paths)
         return res.fetchall()
 
     def add_label(self, label_name:str):
         """
         Register a label.
-        
+
         :param label_name: label name.
         :type label_name: str
         """
-
-        self.cursor.execute('INSERT INTO label VALUES (?)', label_name)
-        self.connection.commit()
+        try:
+            self.cursor.execute('INSERT INTO label VALUES (?)', [label_name])
+            self.connection.commit()
+        except sqlite3.IntegrityError:
+            pass  # Label already exists
 
     def add_patient(self, patient_id:int, patient_name:str):
         """
@@ -86,8 +91,11 @@ class AnnotationRepo:
         :param patient_name: patient name.
         :type patient_name: str
         """
-        self.cursor.execute('INSERT INTO patient VALUES (?, ?)', patient_id, patient_name)
-        self.connection.commit()
+        try:
+            self.cursor.execute('INSERT INTO patient VALUES (?, ?)', [patient_id, patient_name])
+            self.connection.commit()
+        except sqlite3.IntegrityError:
+            pass  # Patient already exists
 
     def update_label(self, label_name:str, new_name:str):
         """

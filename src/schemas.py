@@ -40,3 +40,70 @@ class HealthResponse(BaseModel):
     version: str = "1.0.0"
     gemini_connected: bool = False
     medgemma_connected: bool = False
+
+
+class LoadDataRequest(BaseModel):
+    """Request to load image paths into a dataset."""
+    data: List[str] = Field(..., description="List of image file paths")
+    data_name: str = Field(..., description="Dataset identifier")
+    auto_annotate: bool = Field(default=False, description="Auto-annotate (not implemented)")
+
+
+class LoadDataResponse(BaseModel):
+    """Response from loading dataset."""
+    success: bool
+    dataset_name: str
+    images_loaded: int
+    message: str
+
+
+class PromptRequest(BaseModel):
+    """Request to analyze images with a prompt."""
+    prompt: str = Field(..., description="Analysis prompt for MedGemma")
+    flagged: Optional[List[str]] = Field(default=None, description="Specific images (None = all)")
+    data_name: str = Field(..., description="Dataset identifier")
+
+
+class PromptResponse(BaseModel):
+    """Response from prompt analysis."""
+    success: bool
+    dataset_name: str
+    images_analyzed: int
+    annotations_updated: int
+    message: str
+    errors: Optional[List[str]] = None
+
+
+class UpdateAnnotationRequest(BaseModel):
+    """Request to update annotation."""
+    img: str = Field(..., description="Image path")
+    new_label: str = Field(..., description="Updated label")
+    new_desc: str = Field(..., description="Updated description")
+    data_name: str = Field(..., description="Dataset identifier")
+
+
+class UpdateAnnotationResponse(BaseModel):
+    """Response from annotation update."""
+    success: bool
+    message: str
+    updated: bool
+
+
+class DeleteAnnotationRequest(BaseModel):
+    """Request to delete annotation(s)."""
+    img: str = Field(..., description="Image path or 'all'")
+    data_name: str = Field(..., description="Dataset identifier")
+
+
+class DeleteAnnotationResponse(BaseModel):
+    """Response from deletion."""
+    success: bool
+    message: str
+    deleted_count: int
+
+
+class ExportResponse(BaseModel):
+    """Response for dataset export."""
+    dataset_name: str
+    total_annotations: int
+    annotations: List[dict]

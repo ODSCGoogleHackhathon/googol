@@ -16,7 +16,7 @@ CREATE TABLE annotation(
     path_url VARCHAR2(40),
     label VARCHAR2(20),
     patient_id INTEGER,
-    desc VARCHAR(40),
+    desc VARCHAR(4000),
 
     CONSTRAINT fk FOREIGN KEY (label)
         REFERENCES label(name),
