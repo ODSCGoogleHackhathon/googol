@@ -1,0 +1,9 @@
+# Backend Dependencies (Core + ML Stack)
+# Use this for Docker backend with MedGemma support
+
+# Include core dependencies
+-r requirements-core.txt
+
+# MedGemma - Heavy ML Stack
+transformers>=4.45.0
+torch>=2.0.0
