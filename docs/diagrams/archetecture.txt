@@ -1,0 +1,21 @@
+          ┌──────────────┐
+          │   TCIA API   │
+          └──────┬───────┘
+                 │
+        Async Batch Ingestion
+                 │
+          ┌──────▼───────┐
+          │   DICOM FS   │  ← src/data/
+          └──────┬───────┘
+                 │
+     Metadata Extraction (no pixels)
+                 │
+          ┌──────▼───────┐
+          │  Vector DB   │  ← FAISS / Chroma
+          └──────┬───────┘
+                 │
+        Retrieval-Augmented Context
+                 │
+          ┌──────▼───────┐
+          │  Gemini LLM  │  ← ontology reasoning
+          └──────────────┘
