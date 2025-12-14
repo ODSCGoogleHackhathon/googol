@@ -23,7 +23,7 @@ def load_dataset(data_name: str, image_paths: List[str]) -> Dict[str, Any]:
         response = requests.post(
             f"{API_URL}/datasets/load",
             json={"data_name": data_name, "data": image_paths},
-            timeout=30
+            timeout=30,
         )
         response.raise_for_status()
         return response.json()
@@ -32,13 +32,15 @@ def load_dataset(data_name: str, image_paths: List[str]) -> Dict[str, Any]:
         return {"success": False, "error": str(e)}
 
 
-def analyze_dataset(data_name: str, prompt: str, flagged: Optional[List[str]] = None) -> Dict[str, Any]:
+def analyze_dataset(
+    data_name: str, prompt: str, flagged: Optional[List[str]] = None
+) -> Dict[str, Any]:
     """Analyze dataset with MedGemma."""
     try:
         response = requests.post(
             f"{API_URL}/datasets/analyze",
             json={"data_name": data_name, "prompt": prompt, "flagged": flagged},
-            timeout=600  # 10 minutes for batch processing
+            timeout=600,  # 10 minutes for batch processing
         )
         response.raise_for_status()
         return response.json()
@@ -58,13 +60,20 @@ def get_annotations(data_name: str) -> Dict[str, Any]:
         return {"dataset_name": data_name, "total_annotations": 0, "annotations": []}
 
 
-def update_annotation(data_name: str, img_path: str, new_label: str, new_desc: str) -> Dict[str, Any]:
+def update_annotation(
+    data_name: str, img_path: str, new_label: str, new_desc: str
+) -> Dict[str, Any]:
     """Update annotation (relabel)."""
     try:
         response = requests.patch(
             f"{API_URL}/annotations",
-            json={"data_name": data_name, "img": img_path, "new_label": new_label, "new_desc": new_desc},
-            timeout=10
+            json={
+                "data_name": data_name,
+                "img": img_path,
+                "new_label": new_label,
+                "new_desc": new_desc,
+            },
+            timeout=10,
         )
         response.raise_for_status()
         return response.json()
@@ -77,9 +86,7 @@ def delete_annotation(data_name: str, img_path: str) -> Dict[str, Any]:
     """Delete annotation (remove)."""
     try:
         response = requests.delete(
-            f"{API_URL}/annotations",
-            json={"data_name": data_name, "img": img_path},
-            timeout=10
+            f"{API_URL}/annotations", json={"data_name": data_name, "img": img_path}, timeout=10
         )
         response.raise_for_status()
         return response.json()
@@ -88,13 +95,15 @@ def delete_annotation(data_name: str, img_path: str) -> Dict[str, Any]:
         return {"success": False, "error": str(e)}
 
 
-def chat_with_ai(message: str, dataset_name: Optional[str] = None, chat_history: Optional[List[dict]] = None) -> Dict[str, Any]:
+def chat_with_ai(
+    message: str, dataset_name: Optional[str] = None, chat_history: Optional[List[dict]] = None
+) -> Dict[str, Any]:
     """Send message to AI chatbot."""
     try:
         response = requests.post(
             f"{API_URL}/chat",
             json={"message": message, "dataset_name": dataset_name, "chat_history": chat_history},
-            timeout=30
+            timeout=30,
         )
         response.raise_for_status()
         return response.json()
