@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   backend:
     build:
@@ -27,10 +25,10 @@ services:
       - ./DB:/app/DB  # Persist database
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
-      interval: 30s
+      interval: 300s
       timeout: 10s
       retries: 3
-      start_period: 40s  # Longer for ML model loading
+      start_period: 30s  # Increase if using huggingface endpoint
     restart: unless-stopped
     networks:
       - medannotator-network

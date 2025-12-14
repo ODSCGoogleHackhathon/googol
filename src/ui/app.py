@@ -1,4 +1,5 @@
 """Streamlit frontend for MedAnnotator."""
+
 import streamlit as st
 import requests
 import base64
@@ -9,10 +10,7 @@ import time
 
 # Page configuration
 st.set_page_config(
-    page_title="MedAnnotator",
-    page_icon="🏥",
-    layout="wide",
-    initial_sidebar_state="expanded"
+    page_title="MedAnnotator", page_icon="🏥", layout="wide", initial_sidebar_state="expanded"
 )
 
 # Backend API URL
@@ -37,17 +35,11 @@ def encode_image_to_base64(image: Image.Image) -> str:
 
 def annotate_image(image_base64: str, user_prompt: str = None, patient_id: str = None):
     """Send annotation request to backend."""
-    payload = {
-        "image_base64": image_base64,
-        "user_prompt": user_prompt,
-        "patient_id": patient_id
-    }
+    payload = {"image_base64": image_base64, "user_prompt": user_prompt, "patient_id": patient_id}
 
     try:
         response = requests.post(
-            f"{API_URL}/annotate",
-            json=payload,
-            timeout=240  # 4 minutes for MedGemma inference
+            f"{API_URL}/annotate", json=payload, timeout=600  # 10 minutes for MedGemma inference
         )
         response.raise_for_status()
         return response.json()
@@ -60,12 +52,14 @@ def main():
     """Main Streamlit application."""
     # Title and description
     st.title("🏥 MedAnnotator")
-    st.markdown("""
+    st.markdown(
+        """
     **LLM-Assisted Multimodal Medical Image Annotation Tool**
 
     Upload a medical image (X-ray, CT, MRI) and receive AI-powered structured annotations
     using Gemini and MedGemma models.
-    """)
+    """
+    )
 
     # Sidebar
     with st.sidebar:
@@ -85,18 +79,21 @@ def main():
         st.divider()
 
         st.header("📋 Instructions")
-        st.markdown("""
+        st.markdown(
+            """
         1. Upload a medical image
         2. (Optional) Add patient ID
         3. (Optional) Add specific instructions
         4. Click "Annotate Image"
         5. Review and edit the results
-        """)
+        """
+        )
 
         st.divider()
 
         st.header("ℹ️ About")
-        st.markdown("""
+        st.markdown(
+            """
         **Team Googol**
 
         Built for the Agentic AI App Hackathon
@@ -106,7 +103,8 @@ def main():
         - MedGemma (Mock)
         - FastAPI
         - Streamlit
-        """)
+        """
+        )
 
     # Main content area
     col1, col2 = st.columns([1, 1])
@@ -118,20 +116,18 @@ def main():
         uploaded_file = st.file_uploader(
             "Upload Medical Image",
             type=["jpg", "jpeg", "png"],
-            help="Upload an X-ray, CT scan, or MRI image"
+            help="Upload an X-ray, CT scan, or MRI image",
         )
 
         # Optional inputs
         patient_id = st.text_input(
-            "Patient ID (Optional)",
-            placeholder="e.g., P-12345",
-            help="Optional patient identifier"
+            "Patient ID (Optional)", placeholder="e.g., P-12345", help="Optional patient identifier"
         )
 
         user_prompt = st.text_area(
             "Special Instructions (Optional)",
             placeholder="e.g., Focus on lung fields, Check for pneumothorax",
-            help="Optional specific areas to focus on"
+            help="Optional specific areas to focus on",
         )
 
         # Display uploaded image
@@ -161,7 +157,7 @@ def main():
                         result = annotate_image(
                             image_base64=image_base64,
                             user_prompt=user_prompt if user_prompt else None,
-                            patient_id=patient_id if patient_id else None
+                            patient_id=patient_id if patient_id else None,
                         )
                         elapsed_time = time.time() - start_time
 
@@ -170,7 +166,9 @@ def main():
                             st.session_state.processing_time = elapsed_time
                             st.success(f"✅ Annotation completed in {elapsed_time:.2f}s")
                         else:
-                            error_msg = result.get("error", "Unknown error") if result else "No response"
+                            error_msg = (
+                                result.get("error", "Unknown error") if result else "No response"
+                            )
                             st.error(f"❌ Annotation failed: {error_msg}")
 
         # Display results if available
@@ -198,7 +196,9 @@ def main():
 
                 if findings:
                     for idx, finding in enumerate(findings, 1):
-                        with st.expander(f"Finding {idx}: {finding.get('label', 'Unknown')}", expanded=True):
+                        with st.expander(
+                            f"Finding {idx}: {finding.get('label', 'Unknown')}", expanded=True
+                        ):
                             col_x, col_y = st.columns(2)
                             with col_x:
                                 st.write("**Location:**", finding.get("location", "N/A"))
@@ -209,7 +209,7 @@ def main():
                                     "Moderate": "🟠",
                                     "Mild": "🟡",
                                     "None": "🟢",
-                                    "Normal": "🟢"
+                                    "Normal": "🟢",
                                 }.get(severity, "⚪")
                                 st.write(f"**Severity:** {severity_color} {severity}")
                 else:
@@ -228,9 +228,7 @@ def main():
                 # Editable JSON output
                 st.subheader("📄 Structured Output (JSON)")
                 edited_json = st.text_area(
-                    "Edit annotation if needed:",
-                    value=json.dumps(annotation, indent=2),
-                    height=300
+                    "Edit annotation if needed:", value=json.dumps(annotation, indent=2), height=300
                 )
 
                 # Download button
@@ -238,7 +236,7 @@ def main():
                     label="💾 Download Annotation",
                     data=edited_json,
                     file_name=f"annotation_{annotation.get('patient_id', 'unknown')}.json",
-                    mime="application/json"
+                    mime="application/json",
                 )
 
         else:

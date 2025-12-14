@@ -1,4 +1,5 @@
 """Gemini-based agent for medical annotation orchestration."""
+
 import logging
 import json
 from typing import Optional, Dict, Any
@@ -34,7 +35,7 @@ class GeminiAnnotationAgent:
                 HarmCategory.HARM_CATEGORY_HATE_SPEECH: HarmBlockThreshold.BLOCK_NONE,
                 HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT: HarmBlockThreshold.BLOCK_NONE,
                 HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_NONE,
-            }
+            },
         )
 
         # Initialize MedGemma tool
@@ -43,10 +44,7 @@ class GeminiAnnotationAgent:
         logger.info(f"Gemini agent initialized with model: {settings.gemini_model}")
 
     def annotate_image(
-        self,
-        image_base64: str,
-        user_prompt: Optional[str] = None,
-        patient_id: Optional[str] = None
+        self, image_base64: str, user_prompt: Optional[str] = None, patient_id: Optional[str] = None
     ) -> AnnotationOutput:
         """
         Perform multi-step annotation using ReAct-style reasoning.
@@ -68,16 +66,14 @@ class GeminiAnnotationAgent:
             # Step 1: Get MedGemma analysis
             logger.info("Step 1: Analyzing image with MedGemma")
             medgemma_analysis = self.medgemma_tool.analyze_image(
-                image_base64=image_base64,
-                prompt=user_prompt
+                image_base64=image_base64, prompt=user_prompt
             )
             logger.info(f"MedGemma analysis complete: {len(medgemma_analysis)} chars")
 
             # Step 2: Parse MedGemma output locally (bypassing Gemini)
             logger.info("Step 2: Parsing MedGemma output locally")
             structured_output = self._create_smart_fallback_annotation(
-                medgemma_analysis,
-                patient_id
+                medgemma_analysis, patient_id
             )
 
             return structured_output
@@ -90,14 +86,11 @@ class GeminiAnnotationAgent:
                 findings=[],
                 confidence_score=0.0,
                 generated_by="Error",
-                additional_notes=f"Error during processing: {str(e)}"
+                additional_notes=f"Error during processing: {str(e)}",
             )
 
     def _generate_structured_annotation(
-        self,
-        medgemma_analysis: str,
-        user_prompt: Optional[str],
-        patient_id: Optional[str]
+        self, medgemma_analysis: str, user_prompt: Optional[str], patient_id: Optional[str]
     ) -> AnnotationOutput:
         """
         Use Gemini to convert MedGemma's analysis into structured JSON.
@@ -142,9 +135,7 @@ Please convert this analysis into the structured JSON format."""
             # Generate structured output using Gemini
             response = self.model.generate_content(
                 [system_prompt, user_message],
-                generation_config={
-                    "response_mime_type": "application/json"
-                }
+                generation_config={"response_mime_type": "application/json"},
             )
 
             # Parse the JSON response
@@ -158,7 +149,9 @@ Please convert this analysis into the structured JSON format."""
 
         except json.JSONDecodeError as e:
             logger.error(f"Failed to parse JSON from Gemini: {e}")
-            logger.error(f"Raw response: {response.text if 'response' in locals() else 'No response'}")
+            logger.error(
+                f"Raw response: {response.text if 'response' in locals() else 'No response'}"
+            )
 
             # Fallback: try to extract findings manually
             return self._create_fallback_annotation(medgemma_analysis, patient_id)
@@ -168,9 +161,7 @@ Please convert this analysis into the structured JSON format."""
             return self._create_fallback_annotation(medgemma_analysis, patient_id)
 
     def _create_smart_fallback_annotation(
-        self,
-        analysis: str,
-        patient_id: Optional[str]
+        self, analysis: str, patient_id: Optional[str]
     ) -> AnnotationOutput:
         """
         Parse MedGemma output locally without Gemini.
@@ -201,54 +192,47 @@ Please convert this analysis into the structured JSON format."""
         analysis_lower = analysis.lower()
         for keyword, (location, severity) in finding_keywords.items():
             if keyword in analysis_lower:
-                findings.append(Finding(
-                    label=keyword.title(),
-                    location=location,
-                    severity=severity
-                ))
+                findings.append(
+                    Finding(label=keyword.title(), location=location, severity=severity)
+                )
 
         # If no findings, create generic one
         if not findings:
-            findings.append(Finding(
-                label="Medical Image Analysis",
-                location="See additional notes",
-                severity="Unknown"
-            ))
+            findings.append(
+                Finding(
+                    label="Medical Image Analysis",
+                    location="See additional notes",
+                    severity="Unknown",
+                )
+            )
 
         return AnnotationOutput(
             patient_id=patient_id or "LOCAL-PARSER-001",
             findings=findings,
             confidence_score=confidence,
             generated_by="MedGemma/Local-Parser",
-            additional_notes=analysis  # Full analysis, no truncation
+            additional_notes=analysis,  # Full analysis, no truncation
         )
 
     def _create_fallback_annotation(
-        self,
-        analysis: str,
-        patient_id: Optional[str]
+        self, analysis: str, patient_id: Optional[str]
     ) -> AnnotationOutput:
         """Create a basic annotation when structured parsing fails."""
         return AnnotationOutput(
             patient_id=patient_id,
             findings=[
                 Finding(
-                    label="Analysis Available",
-                    location="See additional notes",
-                    severity="Unknown"
+                    label="Analysis Available", location="See additional notes", severity="Unknown"
                 )
             ],
             confidence_score=0.5,
             generated_by="MedGemma/Gemini-Fallback",
-            additional_notes=analysis  # Full analysis
+            additional_notes=analysis,  # Full analysis
         )
 
     def check_health(self) -> Dict[str, bool]:
         """Check if the agent and its components are healthy."""
-        health = {
-            "gemini_connected": False,
-            "medgemma_connected": False
-        }
+        health = {"gemini_connected": False, "medgemma_connected": False}
 
         try:
             # Test Gemini connection

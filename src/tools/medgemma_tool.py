@@ -1,4 +1,5 @@
 """MedGemma integration tool for medical image analysis using HuggingFace."""
+
 import logging
 from typing import Optional, Dict, Any
 import base64
@@ -31,11 +32,14 @@ class MedGemmaTool:
 
         self.model = None
         self.processor = None
+        self._model_loaded = False
 
         logger.info(f"Initializing MedGemma tool with endpoint: {self.endpoint}")
 
+        # Lazy loading: Don't load model at startup to allow fast container startup
+        # Model will be loaded on first use
         if self.endpoint == "huggingface":
-            self._load_huggingface_model()
+            logger.info("MedGemma will be loaded on first use (lazy loading)")
 
     def _determine_device(self, device_preference: str) -> str:
         """Determine the best device to use."""
@@ -61,7 +65,7 @@ class MedGemmaTool:
             self.processor = AutoProcessor.from_pretrained(
                 self.model_id,
                 cache_dir=self.cache_dir,
-                token=settings.huggingface_token if settings.huggingface_token else None
+                token=settings.huggingface_token if settings.huggingface_token else None,
             )
 
             # Load model - using AutoModelForImageTextToText for MedGemma
@@ -70,7 +74,7 @@ class MedGemmaTool:
                 cache_dir=self.cache_dir,
                 torch_dtype=torch.bfloat16 if self.device in ["cuda", "mps"] else torch.float32,
                 device_map="auto" if self.device == "auto" else None,
-                token=settings.huggingface_token if settings.huggingface_token else None
+                token=settings.huggingface_token if settings.huggingface_token else None,
             )
 
             if self.device not in ["auto"]:
@@ -95,11 +99,17 @@ class MedGemmaTool:
             Analysis results as a string
         """
         try:
+            # Lazy load model on first use
+            if self.endpoint == "huggingface" and not self._model_loaded:
+                logger.info("First MedGemma request - loading model now...")
+                self._load_huggingface_model()
+                self._model_loaded = True
+
             # Decode image
             image_data = base64.b64decode(image_base64)
             image = Image.open(BytesIO(image_data))
 
-            image = image.convert('RGB')
+            image = image.convert("RGB")
 
             logger.info(f"Analyzing image of size: {image.size}, mode: {image.mode}")
 
@@ -133,15 +143,15 @@ class MedGemmaTool:
             messages = [
                 {
                     "role": "system",
-                    "content": [{"type": "text", "text": "You are an expert radiologist."}]
+                    "content": [{"type": "text", "text": "You are an expert radiologist."}],
                 },
                 {
                     "role": "user",
                     "content": [
                         {"type": "text", "text": user_text},
-                        {"type": "image", "image": image}
-                    ]
-                }
+                        {"type": "image", "image": image},
+                    ],
+                },
             ]
 
             # Apply chat template
@@ -150,7 +160,7 @@ class MedGemmaTool:
                 add_generation_prompt=True,
                 tokenize=True,
                 return_dict=True,
-                return_tensors="pt"
+                return_tensors="pt",
             )
 
             # Move to device
@@ -167,7 +177,7 @@ class MedGemmaTool:
                 generation = self.model.generate(
                     **inputs,
                     max_new_tokens=2048,  # Increased for detailed medical analysis
-                    do_sample=False
+                    do_sample=False,
                 )
                 generation = generation[0][input_len:]
 
@@ -198,18 +208,18 @@ class MedGemmaTool:
                 "properties": {
                     "image_base64": {
                         "type": "string",
-                        "description": "Base64 encoded medical image"
+                        "description": "Base64 encoded medical image",
                     },
                     "focus_areas": {
                         "type": "string",
                         "description": (
                             "Optional: Specific areas to focus on "
                             "(e.g., 'lung fields', 'cardiac silhouette', 'skeletal structures')"
-                        )
-                    }
+                        ),
+                    },
                 },
-                "required": ["image_base64"]
-            }
+                "required": ["image_base64"],
+            },
         }
 
     def unload_model(self):
