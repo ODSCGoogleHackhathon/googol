@@ -19,7 +19,12 @@ class AnnotationRepo:
         > PS: labels and patients must be registered before annotations are saved.
         """
 
-        self.cursor.executemany('INSERT INTO annotation VALUES (?, ?, ?, ?, ?)', [[set_name] + content for content in data])
+        # New schema has 6 columns: set_name, path_url, label, patient_id, desc, request_id
+        # For backward compatibility, set request_id to NULL
+        self.cursor.executemany(
+            'INSERT INTO annotation (set_name, path_url, label, patient_id, desc, request_id) VALUES (?, ?, ?, ?, ?, NULL)',
+            [[set_name] + content for content in data]
+        )
         self.connection.commit()
     
     def update_annotation(self, set_name:str, path:str, new_label:str, new_desc:str):
