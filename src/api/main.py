@@ -265,21 +265,12 @@ def analyze_dataset(request: PromptRequest):
                     image_path=img_path,
                 )
 
-<<<<<<< HEAD
-                # Extract label and description
-                primary_label = result.findings[0].label if result.findings else "No findings"
-                findings_json = json.dumps([f.dict() for f in result.findings])
-                desc = f"{findings_json}\n\n{result.additional_notes or ''}"[
-                    :4000
-                ]  # Match DB limit
-=======
                 # Update annotation with bulletproof data
                 db_repo.add_label(db_data["label"])
                 db_repo.add_patient(db_data["patient_id"], "Auto")
                 db_repo.update_annotation(
                     request.data_name, img_path, db_data["label"], db_data["desc"]
                 )
->>>>>>> cb3f4f7 (add pipeline)
 
                 logger.info(
                     f"✓ Analyzed {img_path}: {len(annotation.findings)} findings, "
