@@ -262,7 +262,7 @@ def analyze_dataset(request: PromptRequest):
                 # Extract label and description
                 primary_label = result.findings[0].label if result.findings else "No findings"
                 findings_json = json.dumps([f.dict() for f in result.findings])
-                desc = f"{findings_json}\n\n{result.additional_notes or ''}"[:500]
+                desc = f"{findings_json}\n\n{result.additional_notes or ''}"[:4000]  # Match DB limit
 
                 # Update annotation
                 db_repo.add_label(primary_label)
