@@ -306,10 +306,10 @@ Watch a 5-minute walkthrough showing:
 
 ## 🤝 Team Googol
 
-- **Rafael Kovashikawa** - [rkovashikawa@gmail.com](mailto:rkovashikawa@gmail.com) - [@kovashikawa](https://github.com/kovashikawa)
-- **Ravali Yerrapothu** - [yravali592@gmail.com](mailto:yravali592@gmail.com) - [@ry639a](https://github.com/ry639a)
+- **Rafael Kovashikawa** - [@kovashikawa](https://github.com/kovashikawa)
+- **Ravali Yerrapothu** - [@ry639a](https://github.com/ry639a)
 - **Tyrone**
-- **Guilherme** - [guirque@gmail.com](mailto:guirque@gmail.com) - [@guirque](https://github.com/guirque)
+- **Guilherme** - [@guirque](https://github.com/guirque)
 
 ## 🛠️ Technology Stack
 
