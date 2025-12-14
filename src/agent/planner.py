@@ -25,18 +25,6 @@ class PlannerAgent:
                     "args": {
                         "metadata": "$previous.metadata"
                     }
-                },
-                {
-                    "tool": "image_to_dicom",
-                    "args": {
-                        "image_path": "annotated_output.png",
-                        "output_dcm": "annotated_output.dcm",
-                        "patient_name": "DOE^JANE",
-                        "patient_id": "A12345",
-                        "study_description": "AI Annotated Image",
-                        "modality": "OT"
-                    }
                 }
-
             ]
         }

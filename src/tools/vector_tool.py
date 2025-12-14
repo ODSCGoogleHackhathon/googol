@@ -1,6 +1,6 @@
 # tools/vector_tool.py
 from tools.base import Tool
-from tools.dicom_vector_index_tool import VectorStore
+
 
 class VectorStoreTool(Tool):
     name = "create_vector_store"

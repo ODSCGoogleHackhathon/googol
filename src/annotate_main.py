@@ -6,8 +6,8 @@ def main():
     tool = ImageToDICOMTool()
 
     result = tool.run(
-        image_path="input.jpg",
-        output_dcm="output.dcm",
+        image_path="test_data/input.jpg",
+        output_dcm="test_data/output.dcm",
         study_description="AI Generated Image"
     )
 

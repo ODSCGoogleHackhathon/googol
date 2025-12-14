@@ -1,1 +1,0 @@
-"""Tool integrations for MedAnnotator."""

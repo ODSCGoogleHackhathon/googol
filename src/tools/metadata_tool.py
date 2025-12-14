@@ -1,6 +1,6 @@
 # tools/metadata_tool.py
 from tools.base import Tool
-from tools.dicom_ontology_presenter import present_dicom_using_ontolog
+
 
 class MetadataTool(Tool):
     name = "extract_metadata"

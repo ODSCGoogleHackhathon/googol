@@ -1,82 +1,125 @@
 """
-Vector store tool for agentic AI pipelines.
+Vector store abstraction for agentic AI memory.
 
-Wraps memory.vector_store.VectorStore so it can be:
-- Planned
-- Executed
-- Evaluated
-- Swapped between backends
+Supports:
+- In-memory vector storage (default)
+- Pluggable embedding functions
+- Metadata + document tracking
+- Planner / Executor friendly interface
 """
 
 from typing import List, Dict, Any, Optional
-from tools.base import Tool
-from memory.vector_store import VectorStore
+from uuid import uuid4
+import math
 
 
-class VectorStoreTool(Tool):
+class VectorStore:
     """
-    Agent-facing vector memory tool.
-    """
+    Simple vector store for agent memory, RAG, and retrieval.
 
-    name = "vector_store"
-    description = (
-        "Store text embeddings in vector memory and perform similarity search. "
-        "Supports add_texts and similarity_search actions."
-    )
+    This implementation is intentionally minimal and deterministic.
+    Swap out the embedding or storage backend without changing agents.
+    """
 
     def __init__(self, embedding_fn):
-        self.store = VectorStore(embedding_fn)
-
-    # ==============================================================
-    # Tool Interface
-    # ==============================================================
-
-    def run(self, action: str, **kwargs) -> Dict[str, Any]:
         """
-        Entry point for agent execution.
-
-        action:
-          - add_texts
-          - similarity_search
-          - count
-          - clear
+        embedding_fn: Callable[[str], List[float]]
         """
-
-        if action == "add_texts":
-            return self._add_texts(**kwargs)
-
-        if action == "similarity_search":
-            return self._similarity_search(**kwargs)
-
-        if action == "count":
-            return {"count": self.store.count()}
-
-        if action == "clear":
-            self.store.clear()
-            return {"status": "cleared"}
-
-        raise ValueError(f"Unsupported vector_store action: {action}")
+        self.embedding_fn = embedding_fn
+        self.vectors: List[Dict[str, Any]] = []
 
     # ==============================================================
-    # Actions
+    # Public API (Agent-facing)
     # ==============================================================
 
-    def _add_texts(
+    def add_texts(
         self,
         texts: List[str],
         metadatas: Optional[List[Dict[str, Any]]] = None
     ) -> Dict[str, Any]:
-        return self.store.add_texts(
-            texts=texts,
-            metadatas=metadatas
-        )
+        """
+        Embed and store text documents.
+        """
+        if metadatas is None:
+            metadatas = [{} for _ in texts]
 
-    def _similarity_search(
+        records = []
+
+        for text, metadata in zip(texts, metadatas):
+            embedding = self.embedding_fn(text)
+
+            record = {
+                "id": str(uuid4()),
+                "text": text,
+                "embedding": embedding,
+                "metadata": metadata
+            }
+
+            self.vectors.append(record)
+            records.append(record["id"])
+
+        return {
+            "status": "success",
+            "stored": len(records),
+            "ids": records
+        }
+
+    def similarity_search(
         self,
         query: str,
         k: int = 5
     ) -> Dict[str, Any]:
-        return self.store.similarity_search(
-            query=query,
-            k=k
-        )
+        """
+        Return top-k most similar documents to the query.
+        """
+        query_embedding = self.embedding_fn(query)
+
+        scored = []
+        for record in self.vectors:
+            score = self._cosine_similarity(
+                query_embedding,
+                record["embedding"]
+            )
+            scored.append((score, record))
+
+        scored.sort(key=lambda x: x[0], reverse=True)
+        top_k = scored[:k]
+
+        return {
+            "query": query,
+            "results": [
+                {
+                    "id": r["id"],
+                    "score": score,
+                    "text": r["text"],
+                    "metadata": r["metadata"]
+                }
+                for score, r in top_k
+            ]
+        }
+
+    def count(self) -> int:
+        """
+        Return number of stored vectors.
+        """
+        return len(self.vectors)
+
+    def clear(self):
+        """
+        Clear all stored vectors.
+        """
+        self.vectors.clear()
+
+    # ==============================================================
+    # Internal helpers
+    # ==============================================================
+
+    def _cosine_similarity(self, v1: List[float], v2: List[float]) -> float:
+        dot = sum(a * b for a, b in zip(v1, v2))
+        norm1 = math.sqrt(sum(a * a for a in v1))
+        norm2 = math.sqrt(sum(b * b for b in v2))
+
+        if norm1 == 0 or norm2 == 0:
+            return 0.0
+
+        return dot / (norm1 * norm2)
