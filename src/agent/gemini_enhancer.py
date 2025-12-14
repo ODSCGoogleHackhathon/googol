@@ -1,4 +1,5 @@
 """Gemini enhancement layer for MedGemma annotations."""
+
 import logging
 from typing import Optional, Dict, Any, List
 import google.generativeai as genai
@@ -19,7 +20,7 @@ class GeminiEnhancer:
             generation_config={
                 "temperature": 0.3,  # Low temperature for medical accuracy
                 "max_output_tokens": 2048,
-            }
+            },
         )
         logger.info(f"Gemini enhancer initialized with model: {settings.gemini_model}")
 
@@ -34,10 +35,9 @@ class GeminiEnhancer:
         Returns:
             Professional report text
         """
-        findings_text = "\n".join([
-            f"- {f.label} in {f.location} (severity: {f.severity})"
-            for f in annotation.findings
-        ])
+        findings_text = "\n".join(
+            [f"- {f.label} in {f.location} (severity: {f.severity})" for f in annotation.findings]
+        )
 
         prompt = f"""You are an expert radiologist. Generate a professional radiology report.
 
@@ -74,10 +74,9 @@ Use standard medical terminology."""
                 "reasoning": "explanation"
             }
         """
-        findings_text = "\n".join([
-            f"- {f.label} in {f.location} (severity: {f.severity})"
-            for f in annotation.findings
-        ])
+        findings_text = "\n".join(
+            [f"- {f.label} in {f.location} (severity: {f.severity})" for f in annotation.findings]
+        )
 
         prompt = f"""You are an expert radiologist. Assess the clinical urgency and significance.
 
@@ -104,13 +103,14 @@ Return ONLY valid JSON:
         try:
             response = self.model.generate_content(prompt)
             import json
+
             return json.loads(response.text)
         except Exception as e:
             logger.error(f"Error assessing urgency: {e}")
             return {
                 "urgency": "routine",
                 "significance": "medium",
-                "reasoning": f"Error in assessment: {str(e)}"
+                "reasoning": f"Error in assessment: {str(e)}",
             }
 
     def suggest_differential_diagnoses(self, annotation: AnnotationOutput) -> List[Dict[str, Any]]:
@@ -124,10 +124,9 @@ Return ONLY valid JSON:
                 "supporting_evidence": "..."
             }
         """
-        findings_text = "\n".join([
-            f"- {f.label} in {f.location} (severity: {f.severity})"
-            for f in annotation.findings
-        ])
+        findings_text = "\n".join(
+            [f"- {f.label} in {f.location} (severity: {f.severity})" for f in annotation.findings]
+        )
 
         prompt = f"""You are an expert radiologist. Suggest differential diagnoses.
 
@@ -152,6 +151,7 @@ Return ONLY valid JSON array."""
         try:
             response = self.model.generate_content(prompt)
             import json
+
             return json.loads(response.text)
         except Exception as e:
             logger.error(f"Error generating differential diagnoses: {e}")
@@ -169,10 +169,9 @@ Return ONLY valid JSON array."""
                 "suggestions": List[str]
             }
         """
-        findings_text = "\n".join([
-            f"- {f.label} in {f.location} (severity: {f.severity})"
-            for f in annotation.findings
-        ])
+        findings_text = "\n".join(
+            [f"- {f.label} in {f.location} (severity: {f.severity})" for f in annotation.findings]
+        )
 
         prompt = f"""You are a quality assurance expert for medical imaging annotations.
 
@@ -201,6 +200,7 @@ Return ONLY valid JSON:
         try:
             response = self.model.generate_content(prompt)
             import json
+
             return json.loads(response.text)
         except Exception as e:
             logger.error(f"Error in quality check: {e}")
@@ -208,5 +208,5 @@ Return ONLY valid JSON:
                 "consistent": True,
                 "confidence": annotation.confidence_score,
                 "issues": [],
-                "suggestions": []
+                "suggestions": [],
             }
