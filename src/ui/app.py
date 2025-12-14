@@ -1,247 +1,241 @@
-"""Streamlit frontend for MedAnnotator."""
-
 import streamlit as st
-import requests
-import base64
+from src.ui.components.image import display_img
+import src.ui.api_client as api_client
+import os
+import pandas as pd
 import json
-from PIL import Image
-from io import BytesIO
-import time
-
-# Page configuration
-st.set_page_config(
-    page_title="MedAnnotator", page_icon="🏥", layout="wide", initial_sidebar_state="expanded"
-)
-
-# Backend API URL
-API_URL = "http://localhost:8000"
 
 
-def check_backend_health():
-    """Check if the backend is running and healthy."""
-    try:
-        response = requests.get(f"{API_URL}/health", timeout=2)
-        return response.status_code == 200, response.json()
-    except Exception as e:
-        return False, {"error": str(e)}
+# HEAD ------------------------------------------------------------------------------------------------------
 
+data_context = None
+colors = ['red', 'green', 'yellow', 'violet', 'orange', 'blue', 'gray']
+colors_i = 1
+if 'available_labels' not in st.session_state.keys():
+    st.session_state['available_labels'] = {
+        'default': 'red'
+    }
 
-def encode_image_to_base64(image: Image.Image) -> str:
-    """Convert PIL Image to base64 string."""
-    buffered = BytesIO()
-    image.save(buffered, format="PNG")
-    return base64.b64encode(buffered.getvalue()).decode()
+MAX_IMG_PER_PAGE=12
+if 'imgs' not in st.session_state.keys():
+   st.session_state['imgs'] = [[]]
 
+if 'chat_history' not in st.session_state.keys():
+   st.session_state['chat_history'] = [{
+    'name': 'ai', 'content': 
+    'Hello! How can I help you with labeling this dataset?'
+    }]
 
-def annotate_image(image_base64: str, user_prompt: str = None, patient_id: str = None):
-    """Send annotation request to backend."""
-    payload = {"image_base64": image_base64, "user_prompt": user_prompt, "patient_id": patient_id}
+st.set_page_config(layout='wide')
 
-    try:
-        response = requests.post(
-            f"{API_URL}/annotate", json=payload, timeout=600  # 10 minutes for MedGemma inference
-        )
-        response.raise_for_status()
-        return response.json()
-    except Exception as e:
-        st.error(f"Error calling backend: {e}")
-        return None
+# HEADER --------------------------------------------------------------------------------------------------
 
+st.header('Googol')
 
-def main():
-    """Main Streamlit application."""
-    # Title and description
-    st.title("🏥 MedAnnotator")
-    st.markdown(
-        """
-    **LLM-Assisted Multimodal Medical Image Annotation Tool**
+'---'
+# FILE UPLOAD AREA ----------------------------------------------------------------------------------------
 
-    Upload a medical image (X-ray, CT, MRI) and receive AI-powered structured annotations
-    using Gemini and MedGemma models.
-    """
-    )
+# imgs = st.file_uploader('Upload Dataset  Folder / Images', type=['jpg', 'jpeg', 'png', 'svg'], accept_multiple_files='directory')
 
-    # Sidebar
-    with st.sidebar:
-        st.header("⚙️ Configuration")
+with st.expander('# 📁 Add Files', expanded=False):
+    folder_path = st.text_input('Please choose a folder path:')
+    consider_folder_as_patient = st.checkbox('Consider Subfolder As Patient ID')
+    consider_folder_as_label = st.checkbox('Consider Subfolder As Label')
+    confirmed = st.button('Confirm')
+    ALLOWED_EXTENSIONS = ('jpg', 'jpeg', 'png', 'svg')
+    df_data = {'label': [], 'description': [], 'path': [], 'patient': []}
+    if folder_path and confirmed:
+        current_page = 0
+        file_num = 0
+        iterator = os.walk(folder_path)
+        data = next(iterator, None)
+        st.session_state['imgs'] = [[]]
+        while data is not None:
+            dirpath, dirnames, filenames = data
 
-        # Backend health check
-        is_healthy, health_data = check_backend_health()
-        if is_healthy:
-            st.success("✅ Backend Connected")
-            if "gemini_connected" in health_data:
-                st.info(f"Gemini: {'✅' if health_data['gemini_connected'] else '❌'}")
-                st.info(f"MedGemma: {'✅' if health_data['medgemma_connected'] else '❌'}")
-        else:
-            st.error("❌ Backend Disconnected")
-            st.warning("Please start the backend server: `python -m src.api.main`")
+            folder_name = dirpath.split('/')[-1]
 
-        st.divider()
+            for filename in filenames:
+                # Check if file format is appropriate
+                if filename.endswith(ALLOWED_EXTENSIONS):
 
-        st.header("📋 Instructions")
-        st.markdown(
-            """
-        1. Upload a medical image
-        2. (Optional) Add patient ID
-        3. (Optional) Add specific instructions
-        4. Click "Annotate Image"
-        5. Review and edit the results
-        """
-        )
+                    # If there's no space in the current page, add a new page
+                    if file_num == MAX_IMG_PER_PAGE:
+                        current_page += 1
+                        st.session_state['imgs'].append([])
+                        file_num = 0
+                    
+                    # Add to current page
+                    file_path = os.path.join(dirpath, filename)
+                    st.session_state['imgs'][current_page].append(file_path)
 
-        st.divider()
+                    df_data['label'].append(folder_name if consider_folder_as_label else 'default')
+                    df_data['description'].append('No description provided.')
+                    df_data['path'].append(file_path)
+                    df_data['patient'].append(folder_name if consider_folder_as_patient else 'anonymous')
+                    file_num += 1
 
-        st.header("ℹ️ About")
-        st.markdown(
-            """
-        **Team Googol**
+            data = next(iterator, None)
+        
+        st.session_state['final_data_df'] = pd.DataFrame(df_data)
 
-        Built for the Agentic AI App Hackathon
+        # Setting labels
+        for label in st.session_state['final_data_df']['label'].unique():
+            st.session_state['available_labels'][label] = colors[colors_i % len(colors)]
+            colors_i += 1
 
-        **Technologies:**
-        - Gemini 2.0 Flash
-        - MedGemma (Mock)
-        - FastAPI
-        - Streamlit
-        """
-        )
+        # NEW: Load dataset into backend
+        dataset_name = folder_path.split('/')[-1] or 'dataset'
+        with st.spinner('Loading dataset into backend...'):
+            result = api_client.load_dataset(dataset_name, df_data['path'])
+            if result.get('success'):
+                st.session_state['dataset_name'] = dataset_name
+                message = result.get('message', 'Dataset loaded')
 
-    # Main content area
-    col1, col2 = st.columns([1, 1])
+                # Show appropriate message based on what happened
+                if 'already exist' in message:
+                    st.info(f"ℹ️ {message}")
+                    # Try to fetch existing annotations from backend
+                    cached_data = api_client.get_annotations(dataset_name)
+                    if cached_data.get('total_annotations', 0) > 0:
+                        st.success(f"✅ Found {cached_data['total_annotations']} cached annotations")
 
-    with col1:
-        st.header("📤 Upload & Configure")
+                        # Update local dataframe with cached annotations
+                        path_to_annotation = {ann['path']: ann for ann in cached_data['annotations']}
+                        for idx, row in st.session_state['final_data_df'].iterrows():
+                            if row['path'] in path_to_annotation:
+                                cached = path_to_annotation[row['path']]
+                                st.session_state['final_data_df'].at[idx, 'label'] = cached.get('label', 'pending')
+                                st.session_state['final_data_df'].at[idx, 'description'] = cached.get('description', 'No description')
+                                st.session_state['final_data_df'].at[idx, 'patient'] = str(cached.get('patient_id', 'anonymous'))
 
-        # File upload
-        uploaded_file = st.file_uploader(
-            "Upload Medical Image",
-            type=["jpg", "jpeg", "png"],
-            help="Upload an X-ray, CT scan, or MRI image",
-        )
-
-        # Optional inputs
-        patient_id = st.text_input(
-            "Patient ID (Optional)", placeholder="e.g., P-12345", help="Optional patient identifier"
-        )
-
-        user_prompt = st.text_area(
-            "Special Instructions (Optional)",
-            placeholder="e.g., Focus on lung fields, Check for pneumothorax",
-            help="Optional specific areas to focus on",
-        )
-
-        # Display uploaded image
-        if uploaded_file is not None:
-            image = Image.open(uploaded_file)
-            st.image(image, caption="Uploaded Medical Image", use_container_width=True)
-
-            # Store in session state
-            st.session_state.uploaded_image = image
-            st.session_state.image_name = uploaded_file.name
-
-    with col2:
-        st.header("📊 Annotation Results")
-
-        if uploaded_file is not None:
-            # Annotate button
-            if st.button("🔬 Annotate Image", type="primary", use_container_width=True):
-                if not is_healthy:
-                    st.error("Backend is not running. Please start the server.")
+                        # Update available labels from cached data
+                        for label in st.session_state['final_data_df']['label'].unique():
+                            if label not in st.session_state['available_labels']:
+                                st.session_state['available_labels'][label] = colors[colors_i % len(colors)]
+                                colors_i += 1
                 else:
-                    with st.spinner("Analyzing image with AI models..."):
-                        # Encode image
-                        image_base64 = encode_image_to_base64(st.session_state.uploaded_image)
+                    st.success(f"✅ {message}")
+            else:
+                st.warning(f"⚠️ Dataset loaded locally but backend load failed: {result.get('error', 'Unknown error')}")
 
-                        # Call backend
-                        start_time = time.time()
-                        result = annotate_image(
-                            image_base64=image_base64,
-                            user_prompt=user_prompt if user_prompt else None,
-                            patient_id=patient_id if patient_id else None,
+        print('Data collected: ', st.session_state['imgs'])
+
+# EXPORT & Statistics --------------------------------------------------------------------------------
+
+@st.dialog('Statistics', width='large')
+def show_statistics():
+    #st.bar_chart()
+    st.write('Data')
+
+    if 'final_data_df' in st.session_state is not None:
+
+        st.dataframe(st.session_state['final_data_df'])
+
+        st.write('Label Frequencies')
+        frequencies_df = st.session_state['final_data_df']['label'].value_counts()
+
+        st.bar_chart(frequencies_df, horizontal=True)
+    else:
+        st.error('Please choose a folder before viewing statistics.')
+
+
+export_and_st = st.columns(2)
+
+with export_and_st[0]:
+    if st.button('# 📦 Export Results', use_container_width=True):
+        if 'dataset_name' in st.session_state:
+            with st.spinner('Exporting dataset...'):
+                result = api_client.export_dataset(st.session_state['dataset_name'])
+                if result.get('total_annotations', 0) > 0:
+                    st.download_button(
+                        "💾 Download JSON",
+                        data=json.dumps(result['annotations'], indent=2),
+                        file_name=f"{st.session_state['dataset_name']}_annotations.json",
+                        mime="application/json"
+                    )
+                    st.success(f"✅ Exported {result['total_annotations']} annotations")
+                else:
+                    st.warning("No annotations to export")
+        else:
+            st.error('Please load a dataset first')
+with export_and_st[1]:
+    if st.button('📊 View Statistics', use_container_width=True):
+        show_statistics()
+
+# MAIN AREA (Where Images are Displayed) -------------------------------------------------------------
+
+columns = st.columns(3, gap='medium')
+
+if 'page_num' not in st.session_state:
+    st.session_state['page_num'] = 0
+with st.container(key='imgs_page'):
+    
+    if len(st.session_state['imgs']) > 1:
+        last_page = len(st.session_state['imgs'])
+        st.session_state['page_num'] = st.select_slider('Page', options=range(last_page))
+
+    for i, img in enumerate(st.session_state['imgs'][st.session_state['page_num']]):
+        display_img(columns[i % 3], img, st.session_state['final_data_df'][st.session_state['final_data_df']['path'] == img], str(i), st.session_state['available_labels'])
+
+
+# SIDEBAR (Chatbot Zone) -----------------------------------------------------------------------------
+with st.sidebar:
+    # Backend health check
+    is_healthy, health_data = api_client.health_check()
+    if is_healthy:
+        st.success("✅ Backend Connected")
+    else:
+        st.error("❌ Backend Disconnected")
+        st.warning("Start backend: `python -m src.api.main`")
+
+    st.divider()
+
+    st.write("**Labels:**")
+    label_html = " ".join([f"<span style='background-color:{color};padding:4px 8px;border-radius:4px;margin:2px;display:inline-block'>{label}</span>"
+                           for label, color in st.session_state['available_labels'].items()])
+    st.markdown(label_html, unsafe_allow_html=True)
+
+    with st.form('context'):
+        st.write('Write the medical context for your dataset:')
+        data_context = st.text_input('context')
+        submit_button = st.form_submit_button('Submit')
+
+    if submit_button:
+        print(data_context)
+
+    with st.container(key='chat_area'):
+        '---'
+        '# AI Chat'
+
+        for msg in st.session_state['chat_history']:
+            with st.chat_message(msg['name']):
+                st.write(msg['content'])
+        
+        with st.chat_message('user'):
+            with st.form('user_msg_form', clear_on_submit=True):
+                user_input = st.text_input('You:', placeholder='Can you label these images according to anomalies found?', value='')
+                submit = st.form_submit_button('Send', icon='➡️')
+            
+                if submit and user_input:
+                    st.session_state['chat_history'].append({'name': 'user', 'content': user_input})
+
+                    # Call backend chat API
+                    with st.spinner('AI is thinking...'):
+                        response = api_client.chat_with_ai(
+                            message=user_input,
+                            dataset_name=st.session_state.get('dataset_name'),
+                            chat_history=st.session_state['chat_history']
                         )
-                        elapsed_time = time.time() - start_time
 
-                        if result and result.get("success"):
-                            st.session_state.annotation_result = result
-                            st.session_state.processing_time = elapsed_time
-                            st.success(f"✅ Annotation completed in {elapsed_time:.2f}s")
-                        else:
-                            error_msg = (
-                                result.get("error", "Unknown error") if result else "No response"
-                            )
-                            st.error(f"❌ Annotation failed: {error_msg}")
-
-        # Display results if available
-        if "annotation_result" in st.session_state:
-            result = st.session_state.annotation_result
-            annotation = result.get("annotation")
-
-            if annotation:
-                # Metrics
-                col_a, col_b, col_c = st.columns(3)
-                with col_a:
-                    st.metric("Patient ID", annotation.get("patient_id", "N/A"))
-                with col_b:
-                    confidence = annotation.get("confidence_score", 0.0)
-                    st.metric("Confidence", f"{confidence:.1%}")
-                with col_c:
-                    num_findings = len(annotation.get("findings", []))
-                    st.metric("Findings", num_findings)
-
-                st.divider()
-
-                # Findings
-                st.subheader("🔍 Medical Findings")
-                findings = annotation.get("findings", [])
-
-                if findings:
-                    for idx, finding in enumerate(findings, 1):
-                        with st.expander(
-                            f"Finding {idx}: {finding.get('label', 'Unknown')}", expanded=True
-                        ):
-                            col_x, col_y = st.columns(2)
-                            with col_x:
-                                st.write("**Location:**", finding.get("location", "N/A"))
-                            with col_y:
-                                severity = finding.get("severity", "N/A")
-                                severity_color = {
-                                    "Severe": "🔴",
-                                    "Moderate": "🟠",
-                                    "Mild": "🟡",
-                                    "None": "🟢",
-                                    "Normal": "🟢",
-                                }.get(severity, "⚪")
-                                st.write(f"**Severity:** {severity_color} {severity}")
-                else:
-                    st.info("No specific findings detected")
-
-                # Additional notes
-                if annotation.get("additional_notes"):
-                    st.subheader("📝 Additional Notes")
-                    st.info(annotation["additional_notes"])
-
-                # Model info
-                st.caption(f"Generated by: {annotation.get('generated_by', 'Unknown')}")
-
-                st.divider()
-
-                # Editable JSON output
-                st.subheader("📄 Structured Output (JSON)")
-                edited_json = st.text_area(
-                    "Edit annotation if needed:", value=json.dumps(annotation, indent=2), height=300
-                )
-
-                # Download button
-                st.download_button(
-                    label="💾 Download Annotation",
-                    data=edited_json,
-                    file_name=f"annotation_{annotation.get('patient_id', 'unknown')}.json",
-                    mime="application/json",
-                )
-
-        else:
-            st.info("👈 Upload an image and click 'Annotate Image' to see results")
-
-
-if __name__ == "__main__":
-    main()
+                    if response.get('success'):
+                        st.session_state['chat_history'].append({
+                            'name': 'ai',
+                            'content': response.get('ai_message', 'Sorry, I could not process that.')
+                        })
+                    else:
+                        st.session_state['chat_history'].append({
+                            'name': 'ai',
+                            'content': f"Error: {response.get('error', 'Unknown error')}"
+                        })
+                    st.rerun()  

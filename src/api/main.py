@@ -23,6 +23,9 @@ from src.schemas import (
     DeleteAnnotationRequest,
     DeleteAnnotationResponse,
     ExportResponse,
+    GetAnnotationsResponse,
+    ChatRequest,
+    ChatResponse,
 )
 from src.agent.gemini_agent import GeminiAnnotationAgent
 
@@ -184,21 +187,39 @@ def load_dataset(request: LoadDataRequest):
         raise HTTPException(status_code=503, detail="Database not initialized")
 
     try:
-        # Prepare annotation data
-        annotation_data = [[path, "pending", 0, "Awaiting annotation"] for path in request.data]
+        # Get existing annotations to check for duplicates
+        existing_annotations = db_repo.get_annotations(request.data_name)
+        existing_paths = {ann[1] for ann in existing_annotations}  # path_url is at index 1
+
+        # Filter out duplicates
+        new_paths = [path for path in request.data if path not in existing_paths]
+        duplicate_count = len(request.data) - len(new_paths)
 
         # Ensure defaults exist
         db_repo.add_label("pending")
         db_repo.add_patient(0, "Unknown")
 
-        # Save annotations
-        db_repo.save_annotations(request.data_name, annotation_data)
+        # Save only new annotations
+        if new_paths:
+            annotation_data = [[path, "pending", 0, "Awaiting annotation"] for path in new_paths]
+            db_repo.save_annotations(request.data_name, annotation_data)
+
+        # Build response message
+        message_parts = []
+        if new_paths:
+            message_parts.append(f"Loaded {len(new_paths)} new images")
+        if duplicate_count > 0:
+            message_parts.append(f"{duplicate_count} images already exist (skipped)")
+        if not new_paths and not duplicate_count:
+            message_parts.append("No images to load")
+
+        message = ". ".join(message_parts) + "."
 
         return LoadDataResponse(
             success=True,
             dataset_name=request.data_name,
-            images_loaded=len(request.data),
-            message=f"Loaded {len(request.data)} images. Use /datasets/analyze to annotate.",
+            images_loaded=len(new_paths),
+            message=message,
         )
     except Exception as e:
         logger.error(f"Error loading dataset: {e}", exc_info=True)
@@ -336,6 +357,89 @@ def export_dataset(data_name: str):
     except Exception as e:
         logger.error(f"Error exporting dataset: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/datasets/{data_name}/annotations", response_model=GetAnnotationsResponse)
+def get_dataset_annotations(data_name: str):
+    """Get all annotations for a specific dataset."""
+    if db_repo is None:
+        raise HTTPException(status_code=503, detail="Database not initialized")
+
+    try:
+        annotations = db_repo.get_annotations(data_name)
+
+        if not annotations:
+            return GetAnnotationsResponse(
+                dataset_name=data_name, total_annotations=0, annotations=[]
+            )
+
+        return GetAnnotationsResponse(
+            dataset_name=data_name,
+            total_annotations=len(annotations),
+            annotations=[
+                {"path": row[1], "label": row[2], "patient_id": row[3], "description": row[4]}
+                for row in annotations
+            ],
+        )
+    except Exception as e:
+        logger.error(f"Error getting annotations: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/chat", response_model=ChatResponse)
+async def chat_with_ai(request: ChatRequest):
+    """AI chatbot for dataset labeling assistance."""
+    if agent is None:
+        raise HTTPException(status_code=503, detail="Agent not initialized")
+
+    try:
+        # Build context from dataset if provided
+        context = ""
+        if request.dataset_name and db_repo is not None:
+            annotations = db_repo.get_annotations(request.dataset_name)
+            if annotations:
+                labels = {}
+                for row in annotations:
+                    label = row[2]
+                    labels[label] = labels.get(label, 0) + 1
+                context = f"\n\nDataset '{request.dataset_name}' context:\n"
+                context += f"- Total images: {len(annotations)}\n"
+                context += f"- Label distribution: {labels}\n"
+
+        # Build conversation history
+        history_text = ""
+        if request.chat_history:
+            for msg in request.chat_history[-5:]:  # Last 5 messages for context
+                role = msg.get("name", "user")
+                content = msg.get("content", "")
+                history_text += f"{role}: {content}\n"
+
+        # Create prompt for Gemini
+        prompt = f"""You are an AI assistant helping with medical image annotation and dataset labeling.
+
+{context}
+
+Conversation history:
+{history_text if history_text else '(No previous conversation)'}
+
+User: {request.message}
+
+Provide helpful, concise assistance for dataset labeling tasks. If the user asks to label images, suggest using the analyze endpoint with specific prompts."""
+
+        # Use Gemini agent's model for chat
+        import google.generativeai as genai
+
+        genai.configure(api_key=settings.google_api_key)
+        model = genai.GenerativeModel(model_name=settings.gemini_model)
+        response = model.generate_content(prompt)
+
+        return ChatResponse(success=True, ai_message=response.text, error=None)
+
+    except Exception as e:
+        logger.error(f"Error in chat: {e}", exc_info=True)
+        return ChatResponse(
+            success=False, ai_message="", error=f"Chat error: {str(e)}"
+        )
 
 
 if __name__ == "__main__":
