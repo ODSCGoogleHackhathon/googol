@@ -30,20 +30,28 @@ print_result() {
     fi
 }
 
+# Detect Python command (uv run python, python3, or python)
+if command -v uv &> /dev/null; then
+    PYTHON_CMD="uv run python"
+elif command -v python3 &> /dev/null; then
+    PYTHON_CMD="python3"
+elif command -v python &> /dev/null; then
+    PYTHON_CMD="python"
+else
+    echo "❌ ERROR: No Python found (tried: uv, python3, python)"
+    exit 1
+fi
+
 # Test 1: Python version check
 echo "Test 1: Checking Python version..."
-if command -v python &> /dev/null; then
-    python_version=$(python --version 2>&1 | awk '{print $2}')
-    major_version=$(echo $python_version | cut -d. -f1)
-    minor_version=$(echo $python_version | cut -d. -f2)
+python_version=$($PYTHON_CMD --version 2>&1 | awk '{print $2}')
+major_version=$(echo $python_version | cut -d. -f1)
+minor_version=$(echo $python_version | cut -d. -f2)
 
-    if [ "$major_version" -ge 3 ] 2>/dev/null && [ "$minor_version" -ge 11 ] 2>/dev/null; then
-        print_result 0 "Python version $python_version is compatible (requires 3.11+)"
-    else
-        print_result 1 "Python version $python_version is too old (requires 3.11+)"
-    fi
+if [ "$major_version" -ge 3 ] 2>/dev/null && [ "$minor_version" -ge 11 ] 2>/dev/null; then
+    print_result 0 "Python version $python_version is compatible (requires 3.11+, using: $PYTHON_CMD)"
 else
-    print_result 1 "Python not found"
+    print_result 1 "Python version $python_version is too old (requires 3.11+)"
 fi
 echo ""
 
@@ -60,7 +68,7 @@ echo ""
 
 # Test 3: Check required files exist
 echo "Test 3: Checking required files..."
-for file in requirements.txt environment.yml .env.example .gitignore; do
+for file in pyproject.toml .env.example .gitignore; do
     if [ -f "$file" ]; then
         print_result 0 "File exists: $file"
     else
@@ -73,7 +81,7 @@ echo ""
 echo "Test 4: Testing Python imports..."
 
 test_import() {
-    if python -c "import $1" 2>/dev/null; then
+    if $PYTHON_CMD -c "import $1" 2>/dev/null; then
         print_result 0 "Can import: $1"
     else
         print_result 1 "Cannot import: $1"
@@ -90,7 +98,7 @@ echo ""
 echo "Test 5: Testing src module imports..."
 
 test_src_import() {
-    if python -c "from $1 import $2" 2>/dev/null; then
+    if $PYTHON_CMD -c "from $1 import $2" 2>/dev/null; then
         print_result 0 "Can import: $1.$2"
     else
         print_result 1 "Cannot import: $1.$2"
@@ -102,48 +110,18 @@ test_src_import "src.schemas" "AnnotationOutput"
 test_src_import "src.tools.medgemma_tool" "MedGemmaTool"
 echo ""
 
-# Test 6: Test MedGemma tool (mock mode)
-echo "Test 6: Testing MedGemma tool (mock mode)..."
-python << 'EOF'
-import sys
-import base64
-from io import BytesIO
-from PIL import Image
-
-try:
-    from src.tools.medgemma_tool import MedGemmaTool
-
-    # Create a simple test image
-    img = Image.new('RGB', (100, 100), color='white')
-    buffered = BytesIO()
-    img.save(buffered, format="PNG")
-    img_base64 = base64.b64encode(buffered.getvalue()).decode()
-
-    # Test the tool
-    tool = MedGemmaTool(endpoint="local")
-    result = tool.analyze_image(img_base64)
-
-    if result and len(result) > 0 and "FINDINGS" in result:
-        print("SUCCESS: MedGemma tool returned mock analysis")
-        sys.exit(0)
-    else:
-        print("FAIL: MedGemma tool did not return expected output")
-        sys.exit(1)
-except Exception as e:
-    print(f"FAIL: MedGemma tool test failed: {e}")
-    sys.exit(1)
-EOF
-
-if [ $? -eq 0 ]; then
-    print_result 0 "MedGemma mock tool works"
+# Test 6: Test MedGemma tool import (skip initialization to avoid loading model)
+echo "Test 6: Testing MedGemma tool import..."
+if $PYTHON_CMD -c "from src.tools.medgemma_tool import MedGemmaTool" 2>/dev/null; then
+    print_result 0 "MedGemma tool imports successfully (skipping model load)"
 else
-    print_result 1 "MedGemma mock tool failed"
+    print_result 1 "MedGemma tool import failed"
 fi
 echo ""
 
 # Test 7: Test configuration loading
 echo "Test 7: Testing configuration..."
-python << 'EOF'
+$PYTHON_CMD << 'EOF'
 import sys
 try:
     from src.config import settings
@@ -169,7 +147,7 @@ echo ""
 
 # Test 8: Test Pydantic schemas
 echo "Test 8: Testing Pydantic schemas..."
-python << 'EOF'
+$PYTHON_CMD << 'EOF'
 import sys
 try:
     from src.schemas import Finding, AnnotationOutput
@@ -224,7 +202,7 @@ echo ""
 
 # Test 10: FastAPI app can be imported (doesn't start server)
 echo "Test 10: Testing FastAPI app import..."
-python << 'EOF'
+$PYTHON_CMD << 'EOF'
 import sys
 try:
     from src.api.main import app
