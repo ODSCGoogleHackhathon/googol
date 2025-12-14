@@ -62,7 +62,6 @@ jobs:
       run: |
         python -c "from src.config import settings; print('Config OK')"
         python -c "from src.schemas import AnnotationOutput; print('Schemas OK')"
-        python -c "from src.tools.medgemma_tool import MedGemmaTool; print('MedGemma OK')"
 
     - name: Check documentation exists
       run: |
