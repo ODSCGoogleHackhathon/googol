@@ -1,0 +1,89 @@
+# MedAnnotator Backend Dockerfile
+# Optimized multi-stage build for ML workloads
+# Includes: FastAPI + MedGemma (torch, transformers)
+
+# ============================================================================
+# Stage 1: Base image with Python dependencies
+# ============================================================================
+FROM python:3.11 as builder
+
+# Set environment variables
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PIP_NO_CACHE_DIR=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1
+
+# Install system dependencies for compiling Python packages
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    gcc \
+    g++ \
+    git \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /build
+
+# Copy requirements files
+COPY requirements-backend.txt requirements-core.txt ./
+
+# Install PyTorch CPU version (much smaller than CUDA)
+# Using CPU-only build to save ~2GB
+RUN pip install --upgrade pip && \
+    pip install torch --index-url https://download.pytorch.org/whl/cpu
+
+# Install remaining dependencies
+RUN pip install -r requirements-backend.txt
+
+# ============================================================================
+# Stage 2: Runtime image
+# ============================================================================
+FROM python:3.11-slim
+
+# Set environment variables
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    BACKEND_HOST=0.0.0.0 \
+    BACKEND_PORT=8000 \
+    LOG_LEVEL=INFO \
+    MEDGEMMA_ENDPOINT=huggingface \
+    MEDGEMMA_MODEL_ID=google/medgemma-4b-it \
+    MEDGEMMA_CACHE_DIR=/app/models \
+    MEDGEMMA_DEVICE=cpu
+
+# Install runtime dependencies only
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Create app user for security
+RUN useradd -m -u 1000 appuser && \
+    mkdir -p /app/logs /app/data /app/models && \
+    chown -R appuser:appuser /app
+
+WORKDIR /app
+
+# Copy Python dependencies from builder stage
+COPY --from=builder /usr/local/lib/python3.11/site-packages /usr/local/lib/python3.11/site-packages
+COPY --from=builder /usr/local/bin /usr/local/bin
+
+# Copy application code
+COPY --chown=appuser:appuser src/ ./src/
+COPY --chown=appuser:appuser DB/ ./DB/
+COPY --chown=appuser:appuser .env.example ./.env.example
+
+# Create necessary directories
+RUN mkdir -p logs data/sample_images data/annotations models && \
+    chown -R appuser:appuser logs data models
+
+# Switch to non-root user
+USER appuser
+
+# Expose port
+EXPOSE 8000
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
+    CMD curl -f http://localhost:8000/health || exit 1
+
+# Run the application
+CMD ["python", "-m", "src.api.main"]

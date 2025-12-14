@@ -1,0 +1,8 @@
+# Frontend Dependencies (Core + Streamlit)
+# Use this for Docker frontend (lightweight)
+
+# Include core dependencies
+-r requirements-core.txt
+
+# Streamlit UI
+streamlit==1.41.1
