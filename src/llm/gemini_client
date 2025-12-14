@@ -1,0 +1,201 @@
+"""
+Gemini LLM client wrapper for agentic AI systems.
+
+Supports:
+- Planning prompts
+- Reasoning / execution prompts
+- JSON-safe outputs
+- Tool-aware prompting
+"""
+
+from typing import Optional, Dict, Any
+import json
+import os
+
+try:
+    import google.generativeai as genai
+except ImportError:
+    genai = None
+
+
+class GeminiClient:
+    """
+    Lightweight Gemini client for agent planners and reasoners.
+    """
+
+    def __init__(
+        self,
+        model: str = "gemini-1.5-pro",
+        api_key: Optional[str] = None,
+        temperature: float = 0.2,
+        max_output_tokens: int = 2048
+    ):
+        if genai is None:
+            raise ImportError(
+                "google-generativeai is not installed. "
+                "Run: pip install google-generativeai"
+            )
+
+        self.api_key = api_key or os.getenv("GEMINI_API_KEY")
+        if not self.api_key:
+            raise ValueError("GEMINI_API_KEY is not set")
+
+        genai.configure(api_key=self.api_key)
+
+        self.model_name = model
+        self.temperature = temperature
+        self.max_output_tokens = max_output_tokens
+
+        self.model = genai.GenerativeModel(
+            model_name=self.model_name,
+            generation_config={
+                "temperature": self.temperature,
+                "max_output_tokens": self.max_output_tokens,
+            },
+        )
+
+    # ==========================================================
+    # Core Generation
+    # ==========================================================
+
+    def generate(
+        self,
+        prompt: str,
+        system_prompt: Optional[str] = None
+    ) -> str:
+        """
+        Generate raw text output from Gemini.
+        """
+        full_prompt = prompt
+        if system_prompt:
+            full_prompt = f"{system_prompt}\n\n{prompt}"
+
+        response = self.model.generate_content(full_prompt)
+        return response.text.strip()
+
+    # ==========================================================
+    # Planner Helper
+    # ==========================================================
+
+    def generate_plan(
+        self,
+        goal: str,
+        tools_schema: Optional[Dict[str, Any]] = None
+    ) -> Dict[str, Any]:
+        """
+        Generate a structured execution plan in JSON.
+        """
+
+        system_prompt = (
+            "You are a planner agent. "
+            "Break the user's goal into ordered steps. "
+            "Each step must call exactly one tool. "
+            "Output ONLY valid JSON."
+        )
+
+        tools_description = ""
+        if tools_schema:
+            tools_description = (
+                "\nAvailable tools:\n"
+                + json.dumps(tools_schema, indent=2)
+            )
+
+        user_prompt = f"""
+Goal:
+{goal}
+
+Create a JSON plan with this structure:
+
+{{
+  "steps": [
+    {{
+      "tool": "<tool_name>",
+      "args": {{ ... }}
+    }}
+  ]
+}}
+{tools_description}
+"""
+
+        text = self.generate(user_prompt, system_prompt)
+        return self._safe_json_parse(text)
+
+    # ==========================================================
+    # Reasoning Helper
+    # ==========================================================
+
+    def reason(
+        self,
+        context: str,
+        question: str
+    ) -> str:
+        """
+        Use Gemini for reasoning over retrieved context.
+        """
+
+        system_prompt = (
+            "You are a reasoning agent. "
+            "Use the provided context to answer the question. "
+            "If the answer is not present, say so."
+        )
+
+        prompt = f"""
+Context:
+{context}
+
+Question:
+{question}
+"""
+
+        return self.generate(prompt, system_prompt)
+
+    # ==========================================================
+    # Tool-Calling Helper
+    # ==========================================================
+
+    def tool_decision(
+        self,
+        state: Dict[str, Any],
+        tools_schema: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """
+        Decide the next tool call based on current agent state.
+        """
+
+        system_prompt = (
+            "You are an execution agent. "
+            "Based on the current state, decide the next tool call. "
+            "Return ONLY valid JSON."
+        )
+
+        prompt = f"""
+Current state:
+{json.dumps(state, indent=2)}
+
+Available tools:
+{json.dumps(tools_schema, indent=2)}
+
+Return JSON:
+{{
+  "tool": "<tool_name>",
+  "args": {{ ... }}
+}}
+"""
+
+        text = self.generate(prompt, system_prompt)
+        return self._safe_json_parse(text)
+
+    # ==========================================================
+    # Utilities
+    # ==========================================================
+
+    def _safe_json_parse(self, text: str) -> Dict[str, Any]:
+        """
+        Safely parse JSON from LLM output.
+        """
+        try:
+            return json.loads(text)
+        except json.JSONDecodeError:
+            raise ValueError(
+                f"Gemini returned invalid JSON:\n{text}"
+            )
