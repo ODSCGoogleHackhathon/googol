@@ -1,0 +1,67 @@
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+    container_name: medannotator-backend
+    ports:
+      - "8000:8000"
+    environment:
+      - GOOGLE_API_KEY=${GOOGLE_API_KEY}
+      - HUGGINGFACE_TOKEN=${HUGGINGFACE_TOKEN}
+      - BACKEND_HOST=0.0.0.0
+      - BACKEND_PORT=8000
+      - LOG_LEVEL=INFO
+      - MEDGEMMA_ENDPOINT=huggingface
+      - MEDGEMMA_MODEL_ID=google/medgemma-4b-it
+      - MEDGEMMA_CACHE_DIR=/app/models
+      - MEDGEMMA_DEVICE=cpu
+    env_file:
+      - .env
+    volumes:
+      - ./logs:/app/logs
+      - ./data:/app/data
+      - ./models:/app/models  # Persist model cache
+      - ./DB:/app/DB  # Persist database
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 300s
+      timeout: 10s
+      retries: 3
+      start_period: 30s  # Increase if using huggingface endpoint
+    restart: unless-stopped
+    networks:
+      - medannotator-network
+
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+    container_name: medannotator-frontend
+    ports:
+      - "8501:8501"
+    environment:
+      - BACKEND_HOST=backend
+      - BACKEND_PORT=8000
+      - STREAMLIT_SERVER_PORT=8501
+      - STREAMLIT_SERVER_ADDRESS=0.0.0.0
+    env_file:
+      - .env
+    volumes:
+      - ./src/ui:/app/src/ui  # Hot reload for development
+    depends_on:
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8501/_stcore/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    restart: unless-stopped
+    networks:
+      - medannotator-network
+
+networks:
+  medannotator-network:
+    driver: bridge

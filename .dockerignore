@@ -1,0 +1,78 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+dist/
+build/
+
+# Virtual environments
+venv/
+env/
+ENV/
+.venv/
+
+# Environment files (use .env.example as template)
+.env
+.env.local
+
+# Git
+.git/
+.gitignore
+.gitattributes
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Logs (mounted as volume)
+logs/
+*.log
+
+# Data (mounted as volume)
+data/
+
+# Models cache (mounted as volume)
+models/
+
+# DB - Exclude database files but keep Python code
+DB/*.db
+DB/*.db-shm
+DB/*.db-wal
+DB/__pycache__/
+
+# Documentation (not needed in container)
+.claude/
+*.md
+!README.md
+
+# Test files
+tests/
+.pytest_cache/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# CI/CD
+.github/
+
+# Scripts (not needed in container)
+*.sh
+
+# Docker files (don't copy into image)
+Dockerfile*
+docker-compose*.yml
+.dockerignore
+
+# Lock files (we use requirements.txt)
+uv.lock
+poetry.lock
+Pipfile.lock
+
+# Old dependencies file
+requirements.txt
