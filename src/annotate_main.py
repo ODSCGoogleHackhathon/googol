@@ -1,5 +1,5 @@
 # main.py
-from tools.image_to_dicom_tool import ImageToDICOMTool
+from tools.image_to_dicom import ImageToDICOMTool
 
 
 def main():
