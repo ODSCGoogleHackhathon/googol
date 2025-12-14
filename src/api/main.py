@@ -256,19 +256,35 @@ def analyze_dataset(request: PromptRequest):
                 with open(file_path, "rb") as f:
                     image_base64 = base64.b64encode(f.read()).decode("utf-8")
 
-                # Analyze with MedGemma
-                result = agent.annotate_image(image_base64, request.prompt)
+                # Use bulletproof pipeline (imports done at top of function)
+                annotation, db_data = agent.pipeline.annotate(
+                    image_base64=image_base64,
+                    user_prompt=request.prompt,
+                    patient_id=None,
+                    enable_enhancement=False,  # Optional: make this configurable
+                    image_path=img_path,
+                )
 
+<<<<<<< HEAD
                 # Extract label and description
                 primary_label = result.findings[0].label if result.findings else "No findings"
                 findings_json = json.dumps([f.dict() for f in result.findings])
                 desc = f"{findings_json}\n\n{result.additional_notes or ''}"[
                     :4000
                 ]  # Match DB limit
+=======
+                # Update annotation with bulletproof data
+                db_repo.add_label(db_data["label"])
+                db_repo.add_patient(db_data["patient_id"], "Auto")
+                db_repo.update_annotation(
+                    request.data_name, img_path, db_data["label"], db_data["desc"]
+                )
+>>>>>>> cb3f4f7 (add pipeline)
 
-                # Update annotation
-                db_repo.add_label(primary_label)
-                db_repo.update_annotation(request.data_name, img_path, primary_label, desc)
+                logger.info(
+                    f"✓ Analyzed {img_path}: {len(annotation.findings)} findings, "
+                    f"confidence={annotation.confidence_score:.2f}"
+                )
 
                 updated_count += 1
             except Exception as e:
