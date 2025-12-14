@@ -182,35 +182,57 @@ async def annotate_image(request: AnnotationRequest):
 
 @app.post("/datasets/load", response_model=LoadDataResponse)
 def load_dataset(request: LoadDataRequest):
-    """Load image paths into a dataset."""
+    """Load image paths into a dataset (creates placeholder annotation_requests)."""
     if db_repo is None:
         raise HTTPException(status_code=503, detail="Database not initialized")
 
     try:
-        # Get existing annotations to check for duplicates
+        from DB.agentic_repository import AgenticAnnotationRepo
+        agentic_repo = AgenticAnnotationRepo()
+
+        # Get existing annotation_requests to check for duplicates
+        existing_requests = agentic_repo.get_unprocessed_requests(set_name=request.data_name)
+        existing_paths = {req['path_url'] for req in existing_requests}
+
+        # Also check processed annotations
         existing_annotations = db_repo.get_annotations(request.data_name)
-        existing_paths = {ann[1] for ann in existing_annotations}  # path_url is at index 1
+        existing_paths.update({ann[1] for ann in existing_annotations})
 
         # Filter out duplicates
         new_paths = [path for path in request.data if path not in existing_paths]
         duplicate_count = len(request.data) - len(new_paths)
 
         # Ensure defaults exist
-        db_repo.add_label("pending")
         db_repo.add_patient(0, "Unknown")
 
-        # Save only new annotations
-        if new_paths:
-            annotation_data = [[path, "pending", 0, "Awaiting annotation"] for path in new_paths]
-            db_repo.save_annotations(request.data_name, annotation_data)
+        # Create placeholder annotation_requests (not yet analyzed)
+        loaded_count = 0
+        for path in new_paths:
+            try:
+                # Create minimal placeholder request
+                agentic_repo.save_annotation_request(
+                    set_name=request.data_name,
+                    path_url=path,
+                    patient_id=0,  # Default patient
+                    medgemma_raw="[Pending Analysis]",
+                    gemini_validated={"status": "pending"},
+                    validation_attempt=0,
+                    validation_status="pending",
+                    pydantic_output={"patient_id": "0", "findings": [], "confidence_score": 0.0},
+                    confidence_score=0.0,
+                    gemini_enhanced=False
+                )
+                loaded_count += 1
+            except Exception as e:
+                logger.warning(f"Failed to create request for {path}: {e}")
 
         # Build response message
         message_parts = []
-        if new_paths:
-            message_parts.append(f"Loaded {len(new_paths)} new images")
+        if loaded_count > 0:
+            message_parts.append(f"Loaded {loaded_count} new images to annotation_request queue")
         if duplicate_count > 0:
             message_parts.append(f"{duplicate_count} images already exist (skipped)")
-        if not new_paths and not duplicate_count:
+        if not loaded_count and not duplicate_count:
             message_parts.append("No images to load")
 
         message = ". ".join(message_parts) + "."
@@ -218,7 +240,7 @@ def load_dataset(request: LoadDataRequest):
         return LoadDataResponse(
             success=True,
             dataset_name=request.data_name,
-            images_loaded=len(new_paths),
+            images_loaded=loaded_count,
             message=message,
         )
     except Exception as e:
@@ -228,24 +250,37 @@ def load_dataset(request: LoadDataRequest):
 
 @app.post("/datasets/analyze", response_model=PromptResponse)
 def analyze_dataset(request: PromptRequest):
-    """Analyze images in dataset with MedGemma."""
+    """Analyze images in dataset with MedGemma using agentic two-tier pipeline."""
     if db_repo is None or agent is None:
         raise HTTPException(status_code=503, detail="Services not initialized")
 
     try:
-        # Get images to process
-        annotations = db_repo.get_annotations(request.data_name, request.flagged)
-        images_to_process = [ann[1] for ann in annotations]
+        from DB.agentic_repository import AgenticAnnotationRepo
+        from src.pipelines.agentic_annotation_pipeline import AgenticAnnotationPipeline
 
-        if not images_to_process:
+        agentic_repo = AgenticAnnotationRepo()
+        agentic_pipeline = AgenticAnnotationPipeline(enhancer=agent.enhancer)
+
+        # Get unprocessed annotation_requests to analyze
+        if request.flagged:
+            # Get specific flagged images from annotation_request table
+            all_requests = agentic_repo.get_unprocessed_requests(set_name=request.data_name)
+            requests_to_process = [req for req in all_requests if req['path_url'] in request.flagged]
+        else:
+            # Get all unprocessed requests
+            requests_to_process = agentic_repo.get_unprocessed_requests(set_name=request.data_name)
+
+        if not requests_to_process:
             raise HTTPException(
-                status_code=404, detail=f"No images in dataset '{request.data_name}'"
+                status_code=404,
+                detail=f"No unprocessed images in dataset '{request.data_name}'. Use /datasets/load first."
             )
 
         updated_count = 0
         errors = []
 
-        for img_path in images_to_process:
+        for req in requests_to_process:
+            img_path = req['path_url']
             try:
                 # Read image
                 file_path = Path(img_path)
@@ -256,37 +291,64 @@ def analyze_dataset(request: PromptRequest):
                 with open(file_path, "rb") as f:
                     image_base64 = base64.b64encode(f.read()).decode("utf-8")
 
-                # Use bulletproof pipeline (imports done at top of function)
-                annotation, db_data = agent.pipeline.annotate(
+                # Use agentic two-tier pipeline
+                annotation, request_data, summary_text, primary_label = agentic_pipeline.annotate(
                     image_base64=image_base64,
-                    user_prompt=request.prompt,
-                    patient_id=None,
-                    enable_enhancement=False,  # Optional: make this configurable
+                    set_name=request.data_name,
                     image_path=img_path,
+                    user_prompt=request.prompt,
+                    patient_id=0,  # Default patient
+                    enable_enhancement=False,  # Make configurable via request if needed
                 )
 
-                # Update annotation with bulletproof data
-                db_repo.add_label(db_data["label"])
-                db_repo.add_patient(db_data["patient_id"], "Auto")
-                db_repo.update_annotation(
-                    request.data_name, img_path, db_data["label"], db_data["desc"]
+                # Update the existing annotation_request with real data
+                request_id = req['id']
+                agentic_repo.cursor.execute(
+                    """UPDATE annotation_request
+                       SET medgemma_raw = ?, gemini_validated = ?, validation_attempt = ?,
+                           validation_status = ?, pydantic_output = ?, confidence_score = ?,
+                           gemini_enhanced = ?, gemini_report = ?, urgency_level = ?,
+                           clinical_significance = ?
+                       WHERE id = ?""",
+                    (
+                        request_data['medgemma_raw'],
+                        json.dumps(request_data['gemini_validated']),
+                        request_data['validation_attempt'],
+                        request_data['validation_status'],
+                        json.dumps(request_data['pydantic_output']),
+                        request_data['confidence_score'],
+                        request_data['gemini_enhanced'],
+                        request_data.get('gemini_report'),
+                        request_data.get('urgency_level'),
+                        request_data.get('clinical_significance'),
+                        request_id
+                    )
+                )
+                agentic_repo.connection.commit()
+
+                # Process to annotation table (clean summary)
+                agentic_repo.process_request_to_annotation(
+                    request_id=request_id,
+                    gemini_summary=summary_text,
+                    primary_label=primary_label
                 )
 
                 logger.info(
                     f"✓ Analyzed {img_path}: {len(annotation.findings)} findings, "
-                    f"confidence={annotation.confidence_score:.2f}"
+                    f"confidence={annotation.confidence_score:.2f}, label={primary_label}"
                 )
 
                 updated_count += 1
             except Exception as e:
+                logger.error(f"Error analyzing {img_path}: {e}", exc_info=True)
                 errors.append(f"{img_path}: {str(e)}")
 
         return PromptResponse(
             success=True,
             dataset_name=request.data_name,
-            images_analyzed=len(images_to_process),
+            images_analyzed=len(requests_to_process),
             annotations_updated=updated_count,
-            message=f"Analyzed {updated_count}/{len(images_to_process)} images",
+            message=f"Analyzed {updated_count}/{len(requests_to_process)} images with two-tier pipeline",
             errors=errors if errors else None,
         )
     except HTTPException:
