@@ -7,6 +7,9 @@ import torch
 import logging
 from pydantic import BaseModel
 import os
+from dotenv import load_dotenv
+
+load_dotenv()
 
 app = FastAPI()
 
@@ -17,7 +20,7 @@ pipe = pipeline(
     model="google/medgemma-4b-it",
     torch_dtype=torch.bfloat16,
     device="cpu",
-    token=os.environ['HF_TOKEN']
+    token=os.getenv('HF_TOKEN')
 )
 
 @app.get("/health/")

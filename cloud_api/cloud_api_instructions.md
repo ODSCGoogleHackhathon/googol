@@ -21,4 +21,4 @@ The API code is available in the `cloud_api.py` file and uses FastAPI as well as
 ## Considerations on Starting it on Compute Engine
 
 - It was necessary to expand the disk size to 30GB.
-- The commands to run the app involve creating its folder, installing dependencies (as in requirements.txt), setting the HF_TOKEN (HuggingFace token) environment variable and running the app with `fastapi`
+- The commands to run the app involve creating its folder, installing dependencies (as in requirements.txt), creating an .env with HF_TOKEN (HuggingFace token) environment variable and running the app with the `nohup uvicorn` command.
