@@ -135,3 +135,27 @@ class ExportResponse(BaseModel):
     dataset_name: str
     total_annotations: int
     annotations: List[dict]
+
+
+class GetAnnotationsResponse(BaseModel):
+    """Response for retrieving dataset annotations."""
+
+    dataset_name: str
+    total_annotations: int
+    annotations: List[dict]
+
+
+class ChatRequest(BaseModel):
+    """Request for AI chat conversation."""
+
+    message: str = Field(..., description="User message to the AI")
+    dataset_name: Optional[str] = Field(None, description="Dataset context (optional)")
+    chat_history: Optional[List[dict]] = Field(default=None, description="Previous conversation")
+
+
+class ChatResponse(BaseModel):
+    """Response from AI chat."""
+
+    success: bool
+    ai_message: str
+    error: Optional[str] = None
