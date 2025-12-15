@@ -3,9 +3,17 @@ import sqlite3
 
 class AnnotationRepo:
 
-    def __init__(self, db_path: str = "./DB/annotations.db"):
-        self.connection = sqlite3.connect(db_path, check_same_thread=False)
+    def __init__(self, db_path: str = './DB/annotations.db'):
+        self.connection = sqlite3.connect(
+            db_path,
+            check_same_thread=False,
+            timeout=30.0,  # Wait up to 30 seconds for lock
+            isolation_level=None  # Autocommit mode
+        )
         self.cursor = self.connection.cursor()
+
+        # Enable WAL mode for better concurrency
+        self.cursor.execute("PRAGMA journal_mode=WAL")
         self.cursor.execute("PRAGMA foreign_keys = ON")
 
     def save_annotations(self, set_name: str, data: list[list]):
@@ -20,9 +28,11 @@ class AnnotationRepo:
         > PS: labels and patients must be registered before annotations are saved.
         """
 
+        # New schema has 6 columns: set_name, path_url, label, patient_id, desc, request_id
+        # For backward compatibility, set request_id to NULL
         self.cursor.executemany(
-            "INSERT INTO annotation VALUES (?, ?, ?, ?, ?)",
-            [[set_name] + content for content in data],
+            'INSERT INTO annotation (set_name, path_url, label, patient_id, desc, request_id) VALUES (?, ?, ?, ?, ?, NULL)',
+            [[set_name] + content for content in data]
         )
         self.connection.commit()
 

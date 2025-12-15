@@ -33,13 +33,18 @@ def load_dataset(data_name: str, image_paths: List[str]) -> Dict[str, Any]:
 
 
 def analyze_dataset(
-    data_name: str, prompt: str, flagged: Optional[List[str]] = None
+    data_name: str, prompt: str, flagged: Optional[List[str]] = None, force_reanalyze: bool = False
 ) -> Dict[str, Any]:
     """Analyze dataset with MedGemma."""
     try:
         response = requests.post(
             f"{API_URL}/datasets/analyze",
-            json={"data_name": data_name, "prompt": prompt, "flagged": flagged},
+            json={
+                "data_name": data_name,
+                "prompt": prompt,
+                "flagged": flagged,
+                "force_reanalyze": force_reanalyze
+            },
             timeout=600,  # 10 minutes for batch processing
         )
         response.raise_for_status()
@@ -96,13 +101,30 @@ def delete_annotation(data_name: str, img_path: str) -> Dict[str, Any]:
 
 
 def chat_with_ai(
-    message: str, dataset_name: Optional[str] = None, chat_history: Optional[List[dict]] = None
+    message: str, 
+    dataset_name: Optional[str] = None, 
+    chat_history: Optional[List[dict]] = None,
+    request_id: Optional[int] = None
 ) -> Dict[str, Any]:
-    """Send message to AI chatbot."""
+    """
+    Send message to AI chatbot.
+    
+    Args:
+        message: User's message
+        dataset_name: Optional dataset identifier for general questions
+        chat_history: Previous conversation history
+        request_id: Optional annotation request_id for focused Q&A on specific annotation
+                    (if provided, uses ClinicalChatbotTool; otherwise uses MedicalChatbotTool)
+    """
     try:
         response = requests.post(
             f"{API_URL}/chat",
-            json={"message": message, "dataset_name": dataset_name, "chat_history": chat_history},
+            json={
+                "message": message, 
+                "dataset_name": dataset_name, 
+                "chat_history": chat_history,
+                "request_id": request_id
+            },
             timeout=30,
         )
         response.raise_for_status()

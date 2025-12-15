@@ -101,6 +101,17 @@ class MedGemmaTool:
             Analysis results as a string
         """
         try:
+            # Lazy load model on first use
+            if self.endpoint == "huggingface" and not self._model_loaded:
+                logger.info("First MedGemma request - loading model now...")
+                self._load_huggingface_model()
+                # Only set flag after successful load
+                if self.model is not None and self.processor is not None:
+                    self._model_loaded = True
+                    logger.info("✓ MedGemma model loaded and cached for future requests")
+                else:
+                    logger.error("Failed to load MedGemma model")
+                    return "Error: Failed to load MedGemma model"
             # If no API is available, use the loaded HuggingFace model
             if settings.medgemma_api_domain is None:
                 # Lazy load model on first use
