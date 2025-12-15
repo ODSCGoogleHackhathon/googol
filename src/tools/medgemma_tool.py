@@ -121,16 +121,17 @@ class MedGemmaTool:
                 return self._huggingface_analysis(image, prompt)
             # Run with API instead
             else:
-                logger.info('RUNNING API REQUEST')
+                logger.info("RUNNING API REQUEST")
                 res = requests.post(
-                    f'http://{settings.medgemma_api_domain}/annotate/',
+                    f"http://{settings.medgemma_api_domain}/annotate/",
                     json={
                         "prompt": prompt if prompt else "Analyse the image",
-                        "img_b64": image_base64
-                    }, timeout=600
+                        "img_b64": image_base64,
+                    },
+                    timeout=600,
                 )
-                logger.info(f'MEDGEMMA RESPONSE: {res.json()}')
-                return res.json()['medgemma_response']
+                logger.info(f"MEDGEMMA RESPONSE: {res.json()}")
+                return res.json()["medgemma_response"]
 
         except Exception as e:
             logger.error(f"Error analyzing image with MedGemma: {e}")

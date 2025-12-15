@@ -20,48 +20,42 @@ pipe = pipeline(
     model="google/medgemma-4b-it",
     torch_dtype=torch.bfloat16,
     device="cpu",
-    token=os.getenv('HF_TOKEN')
+    token=os.getenv("HF_TOKEN"),
 )
+
 
 @app.get("/health/")
 async def root():
     return {"success": True}
 
+
 class AnnotationPayload(BaseModel):
     prompt: str
     img_b64: str
 
+
 @app.post("/annotate/")
 async def annotate_image(request: AnnotationPayload):
     try:
-    
+
         prompt = request.prompt
         img = request.img_b64
 
         messages = [
             {
                 "role": "system",
-                "content": [{"type": "text", "text": "You are an expert radiologist."}]
+                "content": [{"type": "text", "text": "You are an expert radiologist."}],
             },
             {
                 "role": "user",
-                "content": [
-                    {"type": "text", "text": prompt},
-                    {"type": "image", "image": img}
-                ]
-            }
+                "content": [{"type": "text", "text": prompt}, {"type": "image", "image": img}],
+            },
         ]
-        logger.info('Running inference')
+        logger.info("Running inference")
         output = pipe(text=messages, max_new_tokens=200)
 
-        return {
-            "success": True,
-            "medgemma_response":  output[0]["generated_text"][-1]["content"]
-        }
+        return {"success": True, "medgemma_response": output[0]["generated_text"][-1]["content"]}
 
     except Exception as e:
-        logger.error('Error: ', e)
-        return {
-            "success": False,
-            "msg": e
-        }
+        logger.error("Error: ", e)
+        return {"success": False, "msg": e}
