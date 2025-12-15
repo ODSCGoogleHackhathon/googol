@@ -6,6 +6,8 @@ import base64
 from io import BytesIO
 from PIL import Image
 import torch
+import requests
+
 from transformers import AutoProcessor, AutoModelForImageTextToText
 
 from src.config import settings
@@ -99,22 +101,37 @@ class MedGemmaTool:
             Analysis results as a string
         """
         try:
-            # Lazy load model on first use
-            if self.endpoint == "huggingface" and not self._model_loaded:
-                logger.info("First MedGemma request - loading model now...")
-                self._load_huggingface_model()
-                self._model_loaded = True
+            # If no API is available, use the loaded HuggingFace model
+            if settings.medgemma_api_domain is None:
+                # Lazy load model on first use
+                if self.endpoint == "huggingface" and not self._model_loaded:
+                    logger.info("First MedGemma request - loading model now...")
+                    self._load_huggingface_model()
+                    self._model_loaded = True
 
-            # Decode image
-            image_data = base64.b64decode(image_base64)
-            image = Image.open(BytesIO(image_data))
+                # Decode image
+                image_data = base64.b64decode(image_base64)
+                image = Image.open(BytesIO(image_data))
 
-            image = image.convert("RGB")
+                image = image.convert("RGB")
 
-            logger.info(f"Analyzing image of size: {image.size}, mode: {image.mode}")
+                logger.info(f"Analyzing image of size: {image.size}, mode: {image.mode}")
 
-            # Route to appropriate endpoint
-            return self._huggingface_analysis(image, prompt)
+                # Route to appropriate endpoint
+                return self._huggingface_analysis(image, prompt)
+            # Run with API instead
+            else:
+                logger.info("RUNNING API REQUEST")
+                res = requests.post(
+                    f"http://{settings.medgemma_api_domain}/annotate/",
+                    json={
+                        "prompt": prompt if prompt else "Analyse the image",
+                        "img_b64": image_base64,
+                    },
+                    timeout=600,
+                )
+                logger.info(f"MEDGEMMA RESPONSE: {res.json()}")
+                return res.json()["medgemma_response"]
 
         except Exception as e:
             logger.error(f"Error analyzing image with MedGemma: {e}")
