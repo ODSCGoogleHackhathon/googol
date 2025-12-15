@@ -31,6 +31,7 @@ from src.agent.gemini_agent import GeminiAnnotationAgent
 
 # from src.agent.gemini_enhancer import GeminiEnhancer
 from DB.repository import AnnotationRepo
+from src.tools.medical_chatbot_tool import MedicalChatbotTool
 
 # Configure logging (console only, no file)
 logging.basicConfig(
@@ -44,12 +45,13 @@ logger = logging.getLogger(__name__)
 agent: GeminiAnnotationAgent = None
 # enhancer: GeminiEnhancer = None
 db_repo: AnnotationRepo = None
+chatbot: MedicalChatbotTool = None
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Lifespan context manager for startup and shutdown events."""
-    global agent, enhancer, db_repo
+    global agent, enhancer, db_repo, chatbot
     logger.info("Starting MedAnnotator API...")
     try:
         agent = GeminiAnnotationAgent()
@@ -61,6 +63,9 @@ async def lifespan(app: FastAPI):
 
         db_repo = AnnotationRepo()
         logger.info("Database repository initialized successfully")
+        
+        chatbot = MedicalChatbotTool()
+        logger.info("Medical chatbot initialized successfully")
     except Exception as e:
         logger.error(f"Failed to initialize services: {e}")
         raise
@@ -459,52 +464,31 @@ def get_dataset_annotations(data_name: str):
 
 @app.post("/chat", response_model=ChatResponse)
 async def chat_with_ai(request: ChatRequest):
-    """AI chatbot for dataset labeling assistance."""
-    if agent is None:
-        raise HTTPException(status_code=503, detail="Agent not initialized")
+    """AI chatbot for medical image annotation assistance with access to flagged images and MedGemma analysis."""
+    if chatbot is None:
+        raise HTTPException(status_code=503, detail="Chatbot not initialized")
 
     try:
-        # Build context from dataset if provided
-        context = ""
-        if request.dataset_name and db_repo is not None:
-            annotations = db_repo.get_annotations(request.dataset_name)
-            if annotations:
-                labels = {}
-                for row in annotations:
-                    label = row[2]
-                    labels[label] = labels.get(label, 0) + 1
-                context = f"\n\nDataset '{request.dataset_name}' context:\n"
-                context += f"- Total images: {len(annotations)}\n"
-                context += f"- Label distribution: {labels}\n"
+        # Get agentic repository for MedGemma analysis access
+        agentic_repo = None
+        if request.dataset_name:
+            try:
+                from DB.agentic_repository import AgenticAnnotationRepo
+                agentic_repo = AgenticAnnotationRepo()
+            except Exception as e:
+                logger.warning(f"Could not initialize agentic repo: {e}")
 
-        # Build conversation history
-        history_text = ""
-        if request.chat_history:
-            for msg in request.chat_history[-5:]:  # Last 5 messages for context
-                role = msg.get("name", "user")
-                content = msg.get("content", "")
-                history_text += f"{role}: {content}\n"
+        # Use the medical chatbot tool
+        response = chatbot.chat(
+            message=request.message,
+            dataset_name=request.dataset_name,
+            chat_history=request.chat_history,
+            db_repo=db_repo,
+            agentic_repo=agentic_repo,
+            flagged_paths=request.flagged_paths,
+        )
 
-        # Create prompt for Gemini
-        prompt = f"""You are an AI assistant helping with medical image annotation and dataset labeling.
-
-{context}
-
-Conversation history:
-{history_text if history_text else '(No previous conversation)'}
-
-User: {request.message}
-
-Provide helpful, concise assistance for dataset labeling tasks. If the user asks to label images, suggest using the analyze endpoint with specific prompts."""
-
-        # Use Gemini agent's model for chat
-        import google.generativeai as genai
-
-        genai.configure(api_key=settings.google_api_key)
-        model = genai.GenerativeModel(model_name=settings.gemini_model)
-        response = model.generate_content(prompt)
-
-        return ChatResponse(success=True, ai_message=response.text, error=None)
+        return ChatResponse(success=True, ai_message=response, error=None)
 
     except Exception as e:
         logger.error(f"Error in chat: {e}", exc_info=True)

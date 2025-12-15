@@ -151,6 +151,9 @@ class ChatRequest(BaseModel):
     message: str = Field(..., description="User message to the AI")
     dataset_name: Optional[str] = Field(None, description="Dataset context (optional)")
     chat_history: Optional[List[dict]] = Field(default=None, description="Previous conversation")
+    flagged_paths: Optional[List[str]] = Field(
+        default=None, description="Optional list of specific flagged image paths to focus on"
+    )
 
 
 class ChatResponse(BaseModel):
