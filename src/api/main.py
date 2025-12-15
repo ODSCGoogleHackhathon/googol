@@ -45,13 +45,14 @@ logger = logging.getLogger(__name__)
 agent: GeminiAnnotationAgent = None
 # enhancer: GeminiEnhancer = None
 db_repo: AnnotationRepo = None
+agentic_repo = None  # Will be set from agent.agentic_repo
 chatbot: MedicalChatbotTool = None
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Lifespan context manager for startup and shutdown events."""
-    global agent, enhancer, db_repo, chatbot
+    global agent, enhancer, db_repo, agentic_repo, chatbot
     logger.info("Starting MedAnnotator API...")
     try:
         agent = GeminiAnnotationAgent()
@@ -63,7 +64,11 @@ async def lifespan(app: FastAPI):
 
         db_repo = AnnotationRepo()
         logger.info("Database repository initialized successfully")
-        
+
+        # Reuse agentic_repo from agent to avoid multiple connections
+        agentic_repo = agent.agentic_repo
+        logger.info("Agentic repository linked from agent")
+
         chatbot = MedicalChatbotTool()
         logger.info("Medical chatbot initialized successfully")
     except Exception as e:
@@ -188,12 +193,10 @@ async def annotate_image(request: AnnotationRequest):
 @app.post("/datasets/load", response_model=LoadDataResponse)
 def load_dataset(request: LoadDataRequest):
     """Load image paths into a dataset (creates placeholder annotation_requests)."""
-    if db_repo is None:
+    if db_repo is None or agentic_repo is None:
         raise HTTPException(status_code=503, detail="Database not initialized")
 
     try:
-        from DB.agentic_repository import AgenticAnnotationRepo
-        agentic_repo = AgenticAnnotationRepo()
 
         # Get existing annotation_requests to check for duplicates
         existing_requests = agentic_repo.get_unprocessed_requests(set_name=request.data_name)
@@ -256,14 +259,12 @@ def load_dataset(request: LoadDataRequest):
 @app.post("/datasets/analyze", response_model=PromptResponse)
 def analyze_dataset(request: PromptRequest):
     """Analyze images in dataset with MedGemma using agentic two-tier pipeline."""
-    if db_repo is None or agent is None:
+    if db_repo is None or agent is None or agentic_repo is None:
         raise HTTPException(status_code=503, detail="Services not initialized")
 
     try:
-        from DB.agentic_repository import AgenticAnnotationRepo
         from src.pipelines.agentic_annotation_pipeline import AgenticAnnotationPipeline
 
-        agentic_repo = AgenticAnnotationRepo()
         agentic_pipeline = AgenticAnnotationPipeline(enhancer=agent.enhancer)
 
         # Reset processed flag if force_reanalyze is True
@@ -521,22 +522,13 @@ async def chat_with_ai(request: ChatRequest):
         # Otherwise, use MedicalChatbotTool for general dataset assistance
         logger.info(f"Routing to MedicalChatbotTool for dataset: {request.dataset_name}")
         
-        # Get agentic repository for MedGemma analysis access
-        agentic_repo = None
-        if request.dataset_name:
-            try:
-                from DB.agentic_repository import AgenticAnnotationRepo
-                agentic_repo = AgenticAnnotationRepo()
-            except Exception as e:
-                logger.warning(f"Could not initialize agentic repo: {e}")
-
-        # Use the medical chatbot tool
+        # Use the medical chatbot tool (with global agentic_repo)
         response = chatbot.chat(
             message=request.message,
             dataset_name=request.dataset_name,
             chat_history=request.chat_history,
             db_repo=db_repo,
-            agentic_repo=agentic_repo,
+            agentic_repo=agentic_repo,  # Use global instance
             flagged_paths=request.flagged_paths,
         )
 

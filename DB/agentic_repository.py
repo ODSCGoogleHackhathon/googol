@@ -20,9 +20,18 @@ class AgenticAnnotationRepo:
 
     def __init__(self, db_path: str = './DB/annotations.db'):
         """Initialize database connection."""
-        self.connection = sqlite3.connect(db_path, check_same_thread=False)
+        self.connection = sqlite3.connect(
+            db_path,
+            check_same_thread=False,
+            timeout=30.0,  # Wait up to 30 seconds for lock
+            isolation_level=None  # Autocommit mode
+        )
         self.cursor = self.connection.cursor()
+
+        # Enable WAL mode for better concurrency
+        self.cursor.execute("PRAGMA journal_mode=WAL")
         self.cursor.execute("PRAGMA foreign_keys = ON")
+
         logger.info(f"AgenticAnnotationRepo initialized: {db_path}")
 
     def save_annotation_request(
