@@ -23,6 +23,7 @@ class Settings(BaseSettings):
     medgemma_cache_dir: str = os.getenv("MEDGEMMA_CACHE_DIR", "./models")
     medgemma_device: str = os.getenv("MEDGEMMA_DEVICE", "auto")  # "auto", "cpu", "cuda", "mps"
     huggingface_token: str = os.getenv("HUGGINGFACE_TOKEN", "")  # Optional, for private models
+    medgemma_api_domain:str = os.getenv('MEDGEMMA_API_DOMAIN', None) # 'domain:port' string.
 
     # Backend Configuration
     backend_host: str = os.getenv("BACKEND_HOST", "localhost")
