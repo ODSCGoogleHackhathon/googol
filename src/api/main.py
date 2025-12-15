@@ -46,13 +46,14 @@ agent: GeminiAnnotationAgent = None
 # enhancer: GeminiEnhancer = None
 db_repo: AnnotationRepo = None
 agentic_repo = None  # Will be set from agent.agentic_repo
+agentic_pipeline = None  # Shared pipeline instance to reuse MedGemma model
 chatbot: MedicalChatbotTool = None
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Lifespan context manager for startup and shutdown events."""
-    global agent, enhancer, db_repo, agentic_repo, chatbot
+    global agent, enhancer, db_repo, agentic_repo, agentic_pipeline, chatbot
     logger.info("Starting MedAnnotator API...")
     try:
         agent = GeminiAnnotationAgent()
@@ -68,6 +69,11 @@ async def lifespan(app: FastAPI):
         # Reuse agentic_repo from agent to avoid multiple connections
         agentic_repo = agent.agentic_repo
         logger.info("Agentic repository linked from agent")
+
+        # Initialize agentic pipeline once (reuses MedGemma model across requests)
+        from src.pipelines.agentic_annotation_pipeline import AgenticAnnotationPipeline
+        agentic_pipeline = AgenticAnnotationPipeline(enhancer=agent.enhancer)
+        logger.info("Agentic annotation pipeline initialized (MedGemma model will lazy-load)")
 
         chatbot = MedicalChatbotTool()
         logger.info("Medical chatbot initialized successfully")
@@ -259,13 +265,10 @@ def load_dataset(request: LoadDataRequest):
 @app.post("/datasets/analyze", response_model=PromptResponse)
 def analyze_dataset(request: PromptRequest):
     """Analyze images in dataset with MedGemma using agentic two-tier pipeline."""
-    if db_repo is None or agent is None or agentic_repo is None:
+    if db_repo is None or agent is None or agentic_repo is None or agentic_pipeline is None:
         raise HTTPException(status_code=503, detail="Services not initialized")
 
     try:
-        from src.pipelines.agentic_annotation_pipeline import AgenticAnnotationPipeline
-
-        agentic_pipeline = AgenticAnnotationPipeline(enhancer=agent.enhancer)
 
         # Reset processed flag if force_reanalyze is True
         if request.force_reanalyze:

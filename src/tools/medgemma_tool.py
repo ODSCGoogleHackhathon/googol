@@ -103,7 +103,13 @@ class MedGemmaTool:
             if self.endpoint == "huggingface" and not self._model_loaded:
                 logger.info("First MedGemma request - loading model now...")
                 self._load_huggingface_model()
-                self._model_loaded = True
+                # Only set flag after successful load
+                if self.model is not None and self.processor is not None:
+                    self._model_loaded = True
+                    logger.info("✓ MedGemma model loaded and cached for future requests")
+                else:
+                    logger.error("Failed to load MedGemma model")
+                    return "Error: Failed to load MedGemma model"
 
             # Decode image
             image_data = base64.b64decode(image_base64)
