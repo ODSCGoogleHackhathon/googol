@@ -32,11 +32,11 @@ from src.agent.gemini_agent import GeminiAnnotationAgent
 # from src.agent.gemini_enhancer import GeminiEnhancer
 from DB.repository import AnnotationRepo
 
-# Configure logging
+# Configure logging (console only, no file)
 logging.basicConfig(
     level=getattr(logging, settings.log_level),
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-    handlers=[logging.FileHandler(settings.log_file), logging.StreamHandler()],
+    handlers=[logging.StreamHandler()],
 )
 logger = logging.getLogger(__name__)
 
