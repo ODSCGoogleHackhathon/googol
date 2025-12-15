@@ -89,6 +89,10 @@ with st.expander("# 📁 Add Files", expanded=False):
             result = api_client.load_dataset(dataset_name, df_data["path"])
             if result.get("success"):
                 st.session_state["dataset_name"] = dataset_name
+                # Clear chat history when loading a new dataset
+                st.session_state["chat_history"] = [
+                    {"name": "ai", "content": f"Hello! I'm ready to help you with the '{dataset_name}' dataset. How can I assist you?"}
+                ]
                 message = result.get("message", "Dataset loaded")
 
                 # Show appropriate message based on what happened
@@ -154,9 +158,52 @@ def show_statistics():
         st.error("Please choose a folder before viewing statistics.")
 
 
-export_and_st = st.columns(2)
+action_buttons = st.columns(3)
 
-with export_and_st[0]:
+with action_buttons[0]:
+    if st.button("🔬 Analyze Dataset", use_container_width=True):
+        if "dataset_name" in st.session_state:
+            # Show options for analysis
+            with st.form("analysis_form"):
+                st.write("### Analysis Options")
+                prompt = st.text_input(
+                    "Analysis Prompt",
+                    value="Analyze this medical image for any abnormalities, lesions, or findings."
+                )
+                force_reanalyze = st.checkbox(
+                    "Force Re-analyze",
+                    value=False,
+                    help="Re-analyze images that have already been processed"
+                )
+                submit_analysis = st.form_submit_button("Start Analysis")
+
+                if submit_analysis:
+                    with st.spinner("Analyzing dataset with MedGemma + Gemini..."):
+                        result = api_client.analyze_dataset(
+                            data_name=st.session_state["dataset_name"],
+                            prompt=prompt,
+                            force_reanalyze=force_reanalyze
+                        )
+
+                        if result.get("success"):
+                            st.success(
+                                f"✅ Analyzed {result.get('annotations_updated', 0)} images "
+                                f"(Total: {result.get('images_analyzed', 0)})"
+                            )
+                            if result.get("errors"):
+                                st.warning(f"⚠️ {len(result['errors'])} errors occurred")
+                                with st.expander("View Errors"):
+                                    for err in result['errors']:
+                                        st.error(err)
+
+                            # Refresh annotations
+                            st.rerun()
+                        else:
+                            st.error(f"Analysis failed: {result.get('error', 'Unknown error')}")
+        else:
+            st.error("Please load a dataset first")
+
+with action_buttons[1]:
     if st.button("# 📦 Export Results", use_container_width=True):
         if "dataset_name" in st.session_state:
             with st.spinner("Exporting dataset..."):
@@ -173,7 +220,8 @@ with export_and_st[0]:
                     st.warning("No annotations to export")
         else:
             st.error("Please load a dataset first")
-with export_and_st[1]:
+
+with action_buttons[2]:
     if st.button("📊 View Statistics", use_container_width=True):
         show_statistics()
 
@@ -220,17 +268,34 @@ with st.sidebar:
     )
     st.markdown(label_html, unsafe_allow_html=True)
 
-    with st.form("context"):
-        st.write("Write the medical context for your dataset:")
-        data_context = st.text_input("context")
-        submit_button = st.form_submit_button("Submit")
+    # Context box toggle
+    if "show_context" not in st.session_state:
+        st.session_state["show_context"] = False
+    
+    show_context = st.checkbox("📝 Show Context Box", value=st.session_state["show_context"])
+    st.session_state["show_context"] = show_context
+    
+    if show_context:
+        with st.form("context"):
+            st.write("Write the medical context for your dataset:")
+            data_context = st.text_input("context")
+            submit_button = st.form_submit_button("Submit")
 
-    if submit_button:
-        print(data_context)
+        if submit_button:
+            print(data_context)
 
     with st.container(key="chat_area"):
         "---"
-        "# AI Chat"
+        # Header with clear button
+        chat_header_col1, chat_header_col2 = st.columns([3, 1])
+        with chat_header_col1:
+            st.write("# AI Chat")
+        with chat_header_col2:
+            if st.button("🗑️ Clear", use_container_width=True, help="Clear chat history"):
+                st.session_state["chat_history"] = [
+                    {"name": "ai", "content": "Hello! How can I help you with labeling this dataset?"}
+                ]
+                st.rerun()
 
         for msg in st.session_state["chat_history"]:
             with st.chat_message(msg["name"]):

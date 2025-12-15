@@ -84,6 +84,10 @@ class PromptRequest(BaseModel):
     prompt: str = Field(..., description="Analysis prompt for MedGemma")
     flagged: Optional[List[str]] = Field(default=None, description="Specific images (None = all)")
     data_name: str = Field(..., description="Dataset identifier")
+    force_reanalyze: bool = Field(
+        default=False,
+        description="Force re-analysis of already processed images (resets processed flag)"
+    )
 
 
 class PromptResponse(BaseModel):
@@ -153,6 +157,10 @@ class ChatRequest(BaseModel):
     chat_history: Optional[List[dict]] = Field(default=None, description="Previous conversation")
     flagged_paths: Optional[List[str]] = Field(
         default=None, description="Optional list of specific flagged image paths to focus on"
+    )
+    request_id: Optional[int] = Field(
+        default=None, 
+        description="Optional annotation request_id for focused Q&A on a specific annotation (uses ClinicalChatbotTool)"
     )
 
 

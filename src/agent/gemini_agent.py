@@ -9,6 +9,8 @@ from src.config import settings
 from src.schemas import AnnotationOutput
 from src.pipelines.annotation_pipeline import AnnotationPipeline
 from src.agent.gemini_enhancer import GeminiEnhancer
+from src.tools.clinical_chatbot_tool import ClinicalChatbotTool
+from DB.agentic_repository import AgenticAnnotationRepo
 
 logger = logging.getLogger(__name__)
 
@@ -43,6 +45,12 @@ class GeminiAnnotationAgent:
 
         # Initialize bulletproof pipeline
         self.pipeline = AnnotationPipeline(enhancer=self.enhancer)
+
+        # Initialize agentic repository for clinical chatbot
+        self.agentic_repo = AgenticAnnotationRepo()
+
+        # Initialize clinical chatbot tool (shares the same model instance)
+        self.chatbot_tool = ClinicalChatbotTool(model=self.model, repo=self.agentic_repo)
 
         logger.info(
             f"Gemini agent initialized with bulletproof pipeline "
@@ -106,6 +114,22 @@ class GeminiAnnotationAgent:
                 additional_notes=f"Critical pipeline error: {str(e)}",
             )
 
+
+    def chat_with_annotation(self, request_id: int, question: str) -> str:
+        """
+        Chat with the clinical assistant about a specific annotation.
+
+        This method delegates to the ClinicalChatbotTool to answer questions
+        based on grounded annotation data from the two-tier architecture.
+
+        Args:
+            request_id: The annotation_request ID to fetch data for
+            question: The user's question
+
+        Returns:
+            Clinical assistant's response
+        """
+        return self.chatbot_tool.answer_question(request_id, question)
 
     def check_health(self) -> Dict[str, bool]:
         """Check if the agent and its components are healthy."""

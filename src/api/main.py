@@ -266,6 +266,24 @@ def analyze_dataset(request: PromptRequest):
         agentic_repo = AgenticAnnotationRepo()
         agentic_pipeline = AgenticAnnotationPipeline(enhancer=agent.enhancer)
 
+        # Reset processed flag if force_reanalyze is True
+        if request.force_reanalyze:
+            if request.flagged:
+                # Reset only specific flagged images
+                for path in request.flagged:
+                    agentic_repo.cursor.execute(
+                        "UPDATE annotation_request SET processed = 0 WHERE set_name = ? AND path_url = ?",
+                        [request.data_name, path]
+                    )
+            else:
+                # Reset all images in dataset
+                agentic_repo.cursor.execute(
+                    "UPDATE annotation_request SET processed = 0 WHERE set_name = ?",
+                    [request.data_name]
+                )
+            agentic_repo.connection.commit()
+            logger.info(f"Reset processed flag for dataset '{request.data_name}' (force_reanalyze=True)")
+
         # Get unprocessed annotation_requests to analyze
         if request.flagged:
             # Get specific flagged images from annotation_request table
@@ -276,10 +294,26 @@ def analyze_dataset(request: PromptRequest):
             requests_to_process = agentic_repo.get_unprocessed_requests(set_name=request.data_name)
 
         if not requests_to_process:
-            raise HTTPException(
-                status_code=404,
-                detail=f"No unprocessed images in dataset '{request.data_name}'. Use /datasets/load first."
-            )
+            # Check if dataset has any requests at all
+            all_requests = agentic_repo.cursor.execute(
+                "SELECT COUNT(*) FROM annotation_request WHERE set_name = ?",
+                [request.data_name]
+            ).fetchone()[0]
+
+            if all_requests == 0:
+                raise HTTPException(
+                    status_code=404,
+                    detail=f"No images in dataset '{request.data_name}'. Use POST /datasets/load first to add images."
+                )
+            else:
+                # All images already processed
+                stats = agentic_repo.get_pipeline_stats(set_name=request.data_name)
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"All images in dataset '{request.data_name}' have already been analyzed. "
+                           f"Stats: {stats['processed']}/{stats['total_requests']} processed, "
+                           f"avg confidence: {stats['avg_confidence']:.2f}"
+                )
 
         updated_count = 0
         errors = []
@@ -464,11 +498,29 @@ def get_dataset_annotations(data_name: str):
 
 @app.post("/chat", response_model=ChatResponse)
 async def chat_with_ai(request: ChatRequest):
-    """AI chatbot for medical image annotation assistance with access to flagged images and MedGemma analysis."""
-    if chatbot is None:
-        raise HTTPException(status_code=503, detail="Chatbot not initialized")
+    """
+    AI chatbot for medical image annotation assistance.
+    
+    Routes to:
+    - ClinicalChatbotTool: If request_id is provided (focused Q&A on specific annotation)
+    - MedicalChatbotTool: Otherwise (general dataset assistance)
+    """
+    if chatbot is None or agent is None:
+        raise HTTPException(status_code=503, detail="Chatbot or agent not initialized")
 
     try:
+        # Route to ClinicalChatbotTool if request_id is provided
+        if request.request_id is not None:
+            logger.info(f"Routing to ClinicalChatbotTool for request_id: {request.request_id}")
+            response = agent.chat_with_annotation(
+                request_id=request.request_id,
+                question=request.message
+            )
+            return ChatResponse(success=True, ai_message=response, error=None)
+        
+        # Otherwise, use MedicalChatbotTool for general dataset assistance
+        logger.info(f"Routing to MedicalChatbotTool for dataset: {request.dataset_name}")
+        
         # Get agentic repository for MedGemma analysis access
         agentic_repo = None
         if request.dataset_name:
