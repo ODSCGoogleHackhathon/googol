@@ -2,10 +2,14 @@
 
 > **AI-Powered Medical Image Annotation Tool**
 > Built by Team Googol for the Agentic AI App Hackathon
+>
+> 🏆 **2nd Place Winner** - ODSC Agentic AI App Hackathon 2024
+> [Official Announcement](https://www.linkedin.com/feed/update/urn:li:activity:7407900037394984960/)
 
 [![CI](https://github.com/your-repo/googol/workflows/MedAnnotator%20CI/badge.svg)](https://github.com/your-repo/googol/actions)
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
+[![Hackathon](https://img.shields.io/badge/ODSC%20Hackathon-2nd%20Place-gold.svg)](https://www.linkedin.com/feed/update/urn:li:activity:7407900037394984960/)
 
 ## Overview
 
@@ -18,6 +22,27 @@ MedAnnotator is an LLM-assisted multimodal medical image annotation tool that us
 - **Problem**: Manual medical image annotation is slow (hours per image), inconsistent, and doesn't scale
 - **Solution**: AI-powered structured annotation in 2-5 seconds
 - **Impact**: Faster radiology workflows, better research datasets, improved patient care
+
+## ✨ What's New
+
+### Latest Developments
+
+**Cloud API Integration** (December 2024)
+- ☁️ MedGemma now deployable on Google Cloud Compute Engine
+- 🔄 Automatic fallback: Cloud API → Local HuggingFace model
+- ⚡ Faster processing without local GPU requirements
+- 📖 See [CLOUD_API_INTEGRATION.md](CLOUD_API_INTEGRATION.md) for setup
+
+**Two-Tier Agentic Architecture**
+- 🧠 Enhanced agent pipeline with retry logic and validation
+- 💾 Dual database tables for full traceability (`annotation_request` + `annotation`)
+- 🤖 Medical chatbot with dataset context and tool calling
+- 📊 Real-time analytics and flagged image tracking
+
+**Demo & Documentation**
+- 🎬 Complete demo video with timestamp navigation ([DEMO.md](DEMO.md))
+- 📚 Comprehensive technical documentation
+- 🏆 2nd Place in ODSC Agentic AI App Hackathon 2024
 
 ## 🚀 Quick Start
 
@@ -257,11 +282,16 @@ This will verify:
 
 ## 📚 Documentation
 
+### Core Documentation
 - **[ARCHITECTURE.md](ARCHITECTURE.md)** - Complete system architecture with diagrams
 - **[EXPLANATION.md](EXPLANATION.md)** - Technical deep dive and workflows
-- **[DEMO.md](DEMO.md)** - Demo video with timestamps
+- **[DEMO.md](DEMO.md)** - Demo video with detailed timestamps (3:09 minutes)
+- **[CLOUD_API_INTEGRATION.md](CLOUD_API_INTEGRATION.md)** - Cloud MedGemma API setup and deployment
+
+### Setup Guides
 - **[.claude/PROJECT_SETUP.md](.claude/PROJECT_SETUP.md)** - Detailed setup instructions
 - **[.claude/QUICKSTART.md](.claude/QUICKSTART.md)** - 5-minute quick start
+- **[.claude/MEDGEMMA_SETUP.md](.claude/MEDGEMMA_SETUP.md)** - MedGemma model configuration
 
 ## 🏆 Hackathon Criteria
 
@@ -295,21 +325,27 @@ This will verify:
 
 ## 🎬 Demo
 
-📺 **[Demo Video Link - TO BE ADDED](DEMO.md)**
+📺 **[Watch the Demo Video (3:09)](https://docs.google.com/videos/d/1h6Elcmftgcl6Z3IzYGaVDPj4N1RUVWn96Nyir-YX6bM/edit?usp=sharing)** | **[Detailed Timestamps & Analysis](DEMO.md)**
 
-Watch a 5-minute walkthrough showing:
-- Problem statement and solution
-- Live annotation demo
-- ReAct pattern in action
-- Structured output generation
+Watch our complete walkthrough showing:
+- Problem statement and solution overview
+- Dataset loading and configuration
+- AI chatbot interaction with tool calling
+- MedGemma analysis and Gemini validation pipeline
+- Real-time structured output generation
+- Edge case handling and human-in-the-loop design
 - Real-world impact
 
 ## 🤝 Team Googol
+
+🏆 **2nd Place Winners** - ODSC Agentic AI App Hackathon 2024
 
 - **Rafael Kovashikawa** - [@kovashikawa](https://github.com/kovashikawa)
 - **Ravali Yerrapothu** - [@ry639a](https://github.com/ry639a)
 - **Tyrone**
 - **Guilherme** - [@guirque](https://github.com/guirque)
+
+**Recognition**: [Official ODSC LinkedIn Announcement](https://www.linkedin.com/feed/update/urn:li:activity:7407900037394984960/)
 
 ## 🛠️ Technology Stack
 
@@ -321,13 +357,19 @@ Watch a 5-minute walkthrough showing:
 
 ### AI/ML
 - **Google Gemini 2.0 Flash** - LLM reasoning and JSON generation
-- **MedGemma** - Medical specialist model (mock for MVP)
+- **MedGemma 4B-IT** - Medical specialist model
+  - Deployment: HuggingFace (local) or Google Cloud Compute Engine (cloud)
+  - Automatic fallback for reliability
 - **google-generativeai** - Gemini SDK
+- **transformers** - HuggingFace model loading
+- **PyTorch** - Deep learning framework
 
-### DevOps
+### Cloud & Infrastructure
+- **Google Cloud Compute Engine** - Cloud MedGemma deployment
 - **Docker** - Containerization
 - **GitHub Actions** - CI/CD
 - **Uvicorn** - ASGI server
+- **SQLite** - Two-tier database architecture
 
 ## ⚠️ Important Notes
 
